@@ -1,0 +1,8 @@
+:root { color-scheme: dark; font-family: monospace; background: #100c1c; }
+* { box-sizing: border-box; }
+body { min-height: 100vh; margin: 0; display: grid; place-items: center; background: radial-gradient(circle at 50% 15%, #392054, #100c1c 65%); }
+.game-shell { width: min(960px, 100%); padding: 22px; text-align: center; }
+header { margin-bottom: 12px; } h1 { font-size: clamp(22px, 4vw, 36px); margin: 0; color: #ffd56a; text-shadow: 3px 3px #4b263d; }
+.eyebrow, .hint { font-size: 10px; line-height: 1.75; color: #c6b6d8; }.hint { margin: 14px auto 0; max-width: 700px; }
+#game { width: 100%; border: 5px solid #7b5a9e; box-shadow: 0 0 0 5px #281b37, 0 14px 35px #000a, 0 0 42px #ffd56a14; image-rendering: pixelated; }
+canvas { display: block; width: 100% !important; height: auto !important; image-rendering: pixelated; }
