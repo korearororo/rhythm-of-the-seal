@@ -39,6 +39,53 @@ function pixelSprite(scene, x, y, texture, frame, height, alpha = 1) {
   return sprite.setScale(height / sprite.height);
 }
 
+function validateEnemyPresets() {
+  const issues = [];
+  if (!Array.isArray(ENEMY_ORDER) || ENEMY_ORDER.length === 0) {
+    issues.push('ENEMY_ORDER가 비어 있거나 배열이 아닙니다.');
+  }
+
+  for (const enemyId of ENEMY_ORDER) {
+    if (!Object.prototype.hasOwnProperty.call(ENEMY_PRESETS, enemyId)) {
+      issues.push(`ENEMY_ORDER에 '${enemyId}'가 포함되었지만 ENEMY_PRESETS에 정의되지 않았습니다.`);
+    }
+  }
+
+  Object.entries(ENEMY_PRESETS).forEach(([presetId, enemy]) => {
+    if (!enemy.id || typeof enemy.id !== 'string') issues.push(`${presetId}: id가 없거나 문자열이 아닙니다.`);
+    if (!enemy.displayName || typeof enemy.displayName !== 'string') issues.push(`${presetId}: displayName이 없거나 문자열이 아닙니다.`);
+    if (!enemy.logName || typeof enemy.logName !== 'string') issues.push(`${presetId}: logName이 없거나 문자열이 아닙니다.`);
+    if (typeof enemy.maxHp !== 'number' || !Number.isFinite(enemy.maxHp) || enemy.maxHp <= 0) issues.push(`${presetId}: maxHp가 0보다 큰 숫자가 아닙니다.`);
+
+    if (!enemy.sprite || typeof enemy.sprite !== 'object') {
+      issues.push(`${presetId}: sprite 객체가 없습니다.`);
+    } else {
+      if (!enemy.sprite.texture || typeof enemy.sprite.texture !== 'string') issues.push(`${presetId}: sprite.texture가 없습니다.`);
+      if (!enemy.sprite.frame || typeof enemy.sprite.frame !== 'string') issues.push(`${presetId}: sprite.frame이 없습니다.`);
+      ['x', 'y', 'scale'].forEach((axis) => {
+        const value = enemy.sprite[axis];
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+          issues.push(`${presetId}: sprite.${axis}가 숫자가 아닙니다.`);
+        }
+      });
+    }
+
+    if (!Array.isArray(enemy.intentSequence) || enemy.intentSequence.length === 0) {
+      issues.push(`${presetId}: intentSequence가 비어 있거나 배열이 아닙니다.`);
+    } else {
+      enemy.intentSequence.forEach((intentKey) => {
+        if (!ENEMY_INTENT_DEFS[intentKey]) {
+          issues.push(`${presetId}: intentSequence의 '${intentKey}'가 ENEMY_INTENT_DEFS에 없습니다.`);
+        }
+      });
+    }
+  });
+
+  if (issues.length > 0) {
+    throw new Error(`[ENEMY_PRESETS 검증 실패]\n${issues.join('\n')}`);
+  }
+}
+
 class BootScene extends Phaser.Scene {
   constructor() { super('boot'); }
 
@@ -50,6 +97,8 @@ class BootScene extends Phaser.Scene {
   }
 
   create() {
+    validateEnemyPresets();
+
     const shrine = this.textures.get('shrine-kit');
     shrine.add('arch', 0, 0, 0, 680, 770);
     shrine.add('pillar-left', 0, 680, 60, 230, 690);
@@ -247,8 +296,10 @@ class BattleScene extends Phaser.Scene {
 
   finish(won, message) {
     if (won) {
-      const hasNextBattle = this.enemyIndex + 1 < this.battleOrder.length;
-      if (this.enemyConfig.id === 'goblin' && hasNextBattle) {
+      const nextIndex = this.enemyIndex + 1;
+      const hasNextBattle = nextIndex < this.battleOrder.length;
+      if (hasNextBattle) {
+        this.registry.set('defeatedEnemyId', this.enemyConfig.id);
         this.registry.set('battleIndex', this.enemyIndex + 1);
         this.scene.start('battleTransition');
         return;
@@ -312,14 +363,19 @@ class BattleTransitionScene extends Phaser.Scene {
   create() {
     const nextIndex = this.registry.get('battleIndex') || 1;
     const battleOrder = this.registry.get('battleOrder') || ENEMY_ORDER;
-    const nextEnemy = ENEMY_PRESETS[battleOrder[nextIndex]] || ENEMY_PRESETS.skeleton;
+    const currentEnemyId = this.registry.get('defeatedEnemyId');
+    const currentEnemy = ENEMY_PRESETS[currentEnemyId] || {};
+    const nextEnemyId = battleOrder[nextIndex];
+    const nextEnemy = ENEMY_PRESETS[nextEnemyId];
 
     this.cameras.main.setBackgroundColor('#171024');
     this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x171024);
     this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, 240, 0x2a1d3b).setStrokeStyle(3, 0x9d7bbf);
     this.add.text(WIDTH / 2, 130, '적 조우 완료', { fontFamily: 'monospace', fontSize: '28px', fontStyle: 'bold', color: '#ffd56a' }).setOrigin(.5);
-    this.add.text(WIDTH / 2, 195, '고블린 정찰병을 쓰러뜨렸다.', { fontFamily: 'monospace', fontSize: '17px', color: '#f8f1ff' }).setOrigin(.5);
-    this.add.text(WIDTH / 2, 225, `${nextEnemy.displayName}가 봉인문으로 나아온다.`, { fontFamily: 'monospace', fontSize: '17px', color: '#c6b6d8', align: 'center' }).setOrigin(.5);
+    const defeatedName = (currentEnemy && currentEnemy.displayName) || '적';
+    const nextEnemyName = (nextEnemy && nextEnemy.displayName) || '다음 적';
+    this.add.text(WIDTH / 2, 195, `${defeatedName}을 쓰러뜨렸다.`, { fontFamily: 'monospace', fontSize: '17px', color: '#f8f1ff' }).setOrigin(.5);
+    this.add.text(WIDTH / 2, 225, `${nextEnemyName}가 봉인문으로 나아온다.`, { fontFamily: 'monospace', fontSize: '17px', color: '#c6b6d8', align: 'center' }).setOrigin(.5);
     this.makeButton('다음 적과 전투', WIDTH / 2, 340, 240, 52, 0x6c9b56, () => this.scene.start('battle'));
     this.makeButton('처음부터 다시', WIDTH / 2, 435, 230, 48, 0x765199, () => {
       this.registry.set('battleIndex', 0);
