@@ -3,6 +3,86 @@ const WIDTH = 900;
 const HEIGHT = 620;
 const UI_FONT = '"Pretendard", "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif';
 
+// 외부 음원 없이 짧은 합성 효과음만 재생한다. 자동 재생 제한·미지원 환경은 조용히 무시한다.
+class AudioDirector {
+  constructor() {
+    this.context = null;
+    this.muted = false;
+    this.activeSources = new Set();
+  }
+
+  activate() {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    try {
+      if (!this.context || this.context.state === 'closed') this.context = new AudioContext();
+      if (this.context.state === 'suspended') this.context.resume().catch(() => {});
+    } catch (_) {
+      // 보안 정책 또는 기기 문제로 컨텍스트 생성에 실패해도 게임은 무음으로 계속한다.
+    }
+  }
+
+  toggle() {
+    this.muted = !this.muted;
+    if (this.muted) this.stopAll();
+    if (!this.muted) this.activate();
+    return this.muted;
+  }
+
+  tone(frequency, duration = .08, type = 'square', volume = .028, delay = 0, slideTo = null) {
+    const context = this.context;
+    if (this.muted || !context || context.state !== 'running') return;
+    try {
+      const start = context.currentTime + delay;
+      const end = start + duration;
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = type;
+      oscillator.frequency.setValueAtTime(frequency, start);
+      if (slideTo) oscillator.frequency.exponentialRampToValueAtTime(Math.max(1, slideTo), end);
+      gain.gain.setValueAtTime(.0001, start);
+      gain.gain.exponentialRampToValueAtTime(volume, start + Math.min(.012, duration / 3));
+      gain.gain.exponentialRampToValueAtTime(.0001, end);
+      oscillator.connect(gain).connect(context.destination);
+      this.activeSources.add(oscillator);
+      oscillator.onended = () => this.activeSources.delete(oscillator);
+      oscillator.start(start);
+      oscillator.stop(end + .015);
+    } catch (_) {
+      // 브라우저가 오디오 노드 생성을 막아도 전투 입력과 상태 갱신은 계속한다.
+    }
+  }
+
+  play(name) {
+    const sounds = {
+      button: () => this.tone(520, .045, 'square', .018, 0, 640),
+      attack: () => { this.tone(180, .07, 'sawtooth', .025, 0, 480); this.tone(740, .045, 'square', .016, .035, 520); },
+      enemyAttack: () => this.tone(150, .09, 'sawtooth', .024, 0, 85),
+      hit: () => this.tone(105, .075, 'square', .022, 0, 65),
+      defend: () => { this.tone(430, .07, 'triangle', .024); this.tone(640, .06, 'triangle', .018, .055); },
+      focus: () => { this.tone(330, .06, 'sine', .018); this.tone(495, .09, 'sine', .017, .06); },
+      rhythm: () => { this.tone(660, .045, 'triangle', .02); this.tone(880, .065, 'triangle', .018, .06); },
+      charge: () => { this.tone(170, .13, 'sawtooth', .02, 0, 300); this.tone(250, .1, 'sawtooth', .014, .08, 410); },
+      heavy: () => { this.tone(92, .17, 'sawtooth', .03, 0, 54); this.tone(55, .12, 'square', .018, .07); },
+      interrupt: () => { this.tone(780, .07, 'square', .026); this.tone(1170, .12, 'triangle', .021, .06); },
+      finisher: () => { this.tone(220, .1, 'sawtooth', .025, 0, 930); this.tone(880, .13, 'square', .03, .07, 1320); this.tone(1320, .16, 'triangle', .022, .15); },
+      seal: () => { this.tone(610, .09, 'sine', .022); this.tone(915, .13, 'triangle', .02, .07); },
+      phase: () => { this.tone(260, .14, 'sawtooth', .022, 0, 510); this.tone(1020, .15, 'triangle', .022, .1, 1320); },
+      victory: () => { this.tone(523, .08, 'triangle', .022); this.tone(659, .1, 'triangle', .022, .09); this.tone(784, .18, 'triangle', .024, .2); },
+    };
+    if (sounds[name]) sounds[name]();
+  }
+
+  stopAll() {
+    this.activeSources.forEach((source) => {
+      try { source.stop(); } catch (_) { /* 이미 종료된 노드 */ }
+    });
+    this.activeSources.clear();
+  }
+}
+
+const audio = new AudioDirector();
+
 const ENEMY_INTENT_DEFS = {
   attack: { key: 'attack', name: '일반 공격', detail: '단검을 휘두릅니다.', damage: 5 },
   defend: { key: 'defend', name: '방어', detail: '방패를 들어 피해를 줄입니다.' },
@@ -172,7 +252,7 @@ class IntroScene extends Phaser.Scene {
     const button = this.add.container(x, y, [bg, text]).setSize(w, h).setInteractive({ useHandCursor: true });
     button.on('pointerover', () => bg.setFillStyle(0xffd56a));
     button.on('pointerout', () => bg.setFillStyle(color));
-    button.on('pointerdown', callback);
+    button.on('pointerdown', () => { audio.activate(); audio.play('button'); callback(); });
   }
 }
 
@@ -189,6 +269,7 @@ class BattleScene extends Phaser.Scene {
     this.buildBackground();
     this.buildUi();
     this.resetBattle();
+    this.events.once('shutdown', () => audio.stopAll());
   }
 
   text(x, y, value, size = 14, color = '#f8f1ff', align = 'left') {
@@ -225,7 +306,28 @@ class BattleScene extends Phaser.Scene {
     this.buttons.focus = this.makeButton('focus', '집중', 610, 478, 128, 46, 0x6c9b56);
     this.buttons.finisher = this.makeButton('finisher', '결정타', 760, 478, 140, 46, 0xb37c29);
     this.restartButton = this.makeButton('restart', '다시 시작', 450, 555, 160, 42, 0x765199);
+    this.soundButton = this.makeSoundButton();
     this.restartButton.container.setVisible(false);
+  }
+
+  makeSoundButton() {
+    const bg = this.add.rectangle(0, 0, 92, 28, 0x3b2b50).setStrokeStyle(2, 0xa98bc2);
+    const label = this.text(0, -7, '', 11, '#f8f1ff', 'center').setOrigin(.5, .5);
+    const container = this.add.container(842, 38, [bg, label]).setSize(92, 28).setInteractive({ useHandCursor: true });
+    const refresh = () => {
+      const muted = audio.muted;
+      label.setText(muted ? '소리: 끔' : '소리: 켬').setColor(muted ? '#c6b6d8' : '#ffd56a');
+      bg.setFillStyle(muted ? 0x362746 : 0x3b2b50);
+    };
+    container.on('pointerdown', () => { audio.activate(); audio.toggle(); refresh(); });
+    container.on('pointerover', () => bg.setStrokeStyle(2, 0xffd56a));
+    container.on('pointerout', () => bg.setStrokeStyle(2, 0xa98bc2));
+    refresh();
+    return {
+      container,
+      refresh,
+      status: () => ({ muted: audio.muted, supported: !!(window.AudioContext || window.webkitAudioContext), activeSources: audio.activeSources.size }),
+    };
   }
 
   makeButton(key, label, x, y, w, h, color) {
@@ -233,8 +335,9 @@ class BattleScene extends Phaser.Scene {
     const labelText = this.text(0, -8, label, 13, '#ffffff', 'center').setOrigin(.5, .5);
     const container = this.add.container(x, y, [bg, labelText]).setSize(w, h).setInteractive({ useHandCursor: true });
     container.on('pointerdown', () => {
-      if (key === 'restart') this.resetBattle();
-      else if (!this.inputLocked) this.takeTurn(key, true);
+      audio.activate();
+      if (key === 'restart') { audio.play('button'); this.resetBattle(); }
+      else if (!this.inputLocked) { audio.play('button'); this.takeTurn(key, true); }
     });
     container.on('pointerover', () => { if (container.input.enabled) bg.setFillStyle(0xffd56a); });
     container.on('pointerout', () => bg.setFillStyle(color));
@@ -242,6 +345,7 @@ class BattleScene extends Phaser.Scene {
   }
 
   resetBattle() {
+    audio.stopAll();
     if (this.victoryTimer) this.victoryTimer.remove(false);
     if (this.actionUnlockTimer) this.actionUnlockTimer.remove(false);
     this.victoryTimer = null;
@@ -389,19 +493,23 @@ class BattleScene extends Phaser.Scene {
     let playerDamage = 0; let rhythmGain = 0; let enemyDamage = 0;
     if (action === 'attack') {
       this.animateLunge('player');
+      audio.play('attack');
       playerDamage = enemy.key === 'defend' ? 3 : 7;
       if (enemy.key === 'charge') { rhythmGain = 2; lines.push('공격이 힘 모으기를 끊었다! 리듬 +2'); }
       else lines.push(enemy.key === 'defend' ? '방어에 막혀 피해가 줄었다.' : '검격이 적중했다.');
     } else if (action === 'defend') {
       this.animateFocus(enemy.key === 'heavy');
+      audio.play('defend');
       if (enemy.key === 'heavy') { enemyDamage = 2; rhythmGain = 2; lines.push('강공격을 완벽히 막았다! 리듬 +2'); }
       else { enemyDamage = enemy.damage ? Math.ceil(enemy.damage / 2) : 0; lines.push('방어 태세를 갖췄다.'); }
     } else if (action === 'focus') {
       this.animateFocus(enemy.key === 'defend');
+      audio.play('focus');
       rhythmGain = enemy.key === 'defend' ? 2 : 1; lines.push(enemy.key === 'defend' ? '적이 막는 틈에 집중했다! 리듬 +2' : '호흡을 고른다. 리듬 +1');
     } else if (action === 'finisher') {
       this.animateLunge('player', true);
       this.cameras.main.shake(150, .007);
+      audio.play('finisher');
       playerDamage = this.enemyConfig.boss && wasExposed ? this.enemyConfig.boss.exposedFinisherDamage : 16;
       this.rhythm = 0; lines.push(playerDamage === 24 ? '봉인 파쇄! 노출 결정타 24 피해!' : '결정타! 방어를 꿰뚫는 일격을 날렸다.');
     }
@@ -415,6 +523,7 @@ class BattleScene extends Phaser.Scene {
       this.playEffect('rhythm', 185, 432, rhythmGain === 2 ? 98 : 76, rhythmGain === 2);
       this.showFloatingText(165, 440, `리듬 +${rhythmGain}`, '#ffd56a', rhythmGain === 2);
       this.pulseRhythm(rhythmGain === 2);
+      audio.play('rhythm');
     }
     if (action === 'defend') this.playEffect('guard', this.playerFigure.x, this.playerFigure.y, enemy.key === 'heavy' ? 132 : 106, enemy.key === 'heavy');
     if (action === 'focus') this.flashCombatant('player', 0x79bf78, rhythmGain === 2);
@@ -425,14 +534,20 @@ class BattleScene extends Phaser.Scene {
       lines.push('강공격 준비가 취소되었다.');
       this.showFloatingText(450, 178, '차단!', '#ffd56a', true);
       this.cameras.main.shake(130, .005);
+      audio.play('interrupt');
     }
-    else if (enemy.key === 'charge') lines.push(`${this.enemyConfig.logName}은 다음 턴 강공격을 노린다.`);
+    else if (enemy.key === 'charge') {
+      lines.push(`${this.enemyConfig.logName}은 다음 턴 강공격을 노린다.`);
+      audio.play('charge');
+    }
     else if (enemy.damage) {
       this.animateLunge('enemy', enemy.key === 'heavy');
+      audio.play(enemy.key === 'heavy' ? 'heavy' : 'enemyAttack');
       this.playerHp = Math.max(0, this.playerHp - enemyDamage); lines.push(`${this.enemyConfig.logName}의 ${enemy.name}: ${enemyDamage} 피해`);
       const blockedHeavy = enemy.key === 'heavy' && action === 'defend';
       this.flashCombatant('player', blockedHeavy ? 0x83d6ff : 0xeb5b67, blockedHeavy);
       this.showFloatingText(this.playerFigure.x, this.playerFigure.y - 58, `-${enemyDamage}`, blockedHeavy ? '#9fdcff' : '#ffb1b8', blockedHeavy);
+      audio.play(blockedHeavy ? 'defend' : 'hit');
       if (blockedHeavy) this.showFloatingText(450, 178, '완벽 방어!', '#9fdcff', true);
     }
     else if (enemy.key === 'defend') lines.push(`${this.enemyConfig.logName}은 단단히 방어 중이다.`);
@@ -447,12 +562,14 @@ class BattleScene extends Phaser.Scene {
         lines[0] += ' · 봉인이 열렸다!';
         this.showFloatingText(748, 160, '봉인이 열렸다!', '#ffd56a', true);
         this.cameras.main.flash(110, 255, 213, 106, false);
+        audio.play('seal');
       }
       if (this.phase === 1 && this.enemyHp <= this.enemyConfig.boss.phaseThreshold) {
         this.phase = 2;
         this.phaseText.setText('심장석 균열\n다음 일반 공격부터 7 피해');
         this.enemyFigure.setTint(0xffd5a0);
         this.playEffect('rhythm', 748, 200, 150, true);
+        audio.play('phase');
       }
     }
     this.log = lines.join('\n'); this.render();
@@ -470,6 +587,7 @@ class BattleScene extends Phaser.Scene {
         this.log = '봉인이 풀리며 심장석의 빛이 고르게 번진다.';
         this.render();
         this.playEffect('rhythm', this.enemyFigure.x, this.enemyFigure.y, 250, true);
+        audio.play('victory');
         this.tweens.add({ targets: this.enemyFigure, alpha: 0, duration: 800 });
         this.victoryTimer = this.time.delayedCall(800, () => {
           this.victoryTimer = null;
@@ -542,7 +660,7 @@ class EndingScene extends Phaser.Scene {
     const button = this.add.container(x, y, [bg, text]).setSize(w, h).setInteractive({ useHandCursor: true });
     button.on('pointerover', () => bg.setFillStyle(0xffd56a));
     button.on('pointerout', () => bg.setFillStyle(color));
-    button.on('pointerdown', callback);
+    button.on('pointerdown', () => { audio.activate(); audio.play('button'); callback(); });
   }
 }
 
@@ -582,7 +700,7 @@ class BattleTransitionScene extends Phaser.Scene {
     const button = this.add.container(x, y, [bg, text]).setSize(w, h).setInteractive({ useHandCursor: true });
     button.on('pointerover', () => bg.setFillStyle(0xffd56a));
     button.on('pointerout', () => bg.setFillStyle(color));
-    button.on('pointerdown', callback);
+    button.on('pointerdown', () => { audio.activate(); audio.play('button'); callback(); });
   }
 }
 
