@@ -93,6 +93,7 @@ class BootScene extends Phaser.Scene {
     this.load.image('shrine-kit', 'assets/shrine-kit.png');
     this.load.image('characters', 'assets/characters.png');
     this.load.image('skeleton-shrine-keeper', 'assets/skeleton-shrine-keeper.png');
+    this.load.image('seal-arbiter', 'assets/seal-arbiter.png');
     this.load.image('combat-effects', 'assets/combat-effects.png');
   }
 
@@ -112,6 +113,9 @@ class BootScene extends Phaser.Scene {
 
     const skeleton = this.textures.get('skeleton-shrine-keeper');
     skeleton.add('idle', 0, 0, 0, 1312, 1199);
+
+    const sealArbiter = this.textures.get('seal-arbiter');
+    sealArbiter.add('idle', 0, 0, 0, 1312, 1199);
 
     const effects = this.textures.get('combat-effects');
     effects.add('attack', 0, 0, 0, 724, 724);
