@@ -99,7 +99,8 @@ const ENEMY_PRESETS = {
     logName: '고블린 정찰병',
     maxHp: 40,
     // 원본 고블린은 왼쪽을 향한다. 오른쪽에 배치하므로 뒤집지 않아야 기사와 마주 본다.
-    sprite: { texture: 'characters', frame: 'goblin', x: 755, y: 225, scale: 164, flipX: false },
+    sprite: { texture: 'goblin-combat-sheet', frame: 'idle-0', x: 755, y: 254, scale: 164, flipX: false },
+    combatSheet: true, combatAnimKey: 'goblin',
     // 튜토리얼은 화면에 순서를 노출하지 않는 공격→방어 고정 반복이다.
     intentSequence: ['attack', 'defend'],
     encounterLabel: '고블린 정찰병과 조우했다',
@@ -110,7 +111,7 @@ const ENEMY_PRESETS = {
     logName: '해골 성소지기',
     maxHp: 48,
     sprite: { texture: 'skeleton-combat-sheet', frame: 'idle-0', x: 760, y: 254, scale: 164, flipX: false },
-    combatSheet: true,
+    combatSheet: true, combatAnimKey: 'skeleton',
     intentSequence: ['attack', 'attack', 'defend'],
     encounterLabel: '해골 성소지기와 조우했다',
   },
@@ -198,6 +199,7 @@ class BootScene extends Phaser.Scene {
     this.load.image('combat-effects', 'assets/combat-effects.png');
     this.load.image('novice-combat-sheet', 'assets/novice-combat-sheet.png');
     this.load.image('skeleton-combat-sheet', 'assets/skeleton-shrine-keeper-combat-sheet.png');
+    this.load.image('goblin-combat-sheet', 'assets/goblin-combat-sheet.png');
   }
 
   create() {
@@ -226,7 +228,7 @@ class BootScene extends Phaser.Scene {
     effects.add('rhythm', 0, 1448, 0, 724, 724);
 
     const noviceCombat = this.textures.get('novice-combat-sheet');
-    ['idle', 'attack', 'guard', 'focus', 'hurt'].forEach((row, rowIndex) => {
+    ['idle', 'attack', 'guard', 'focus', 'hurt', 'heavy', 'down'].forEach((row, rowIndex) => {
       for (let column = 0; column < 4; column++) {
         noviceCombat.add(`${row}-${column}`, 0, column * 280, rowIndex * 280, 280, 280);
       }
@@ -236,6 +238,11 @@ class BootScene extends Phaser.Scene {
         frameRate: row === 'attack' || row === 'hurt' ? 12 : 9,
         repeat: row === 'idle' ? -1 : 0,
       });
+    });
+    const goblinCombat = this.textures.get('goblin-combat-sheet');
+    ['idle', 'attack', 'guard', 'hurt'].forEach((row, rowIndex) => {
+      for (let column = 0; column < 4; column++) goblinCombat.add(`${row}-${column}`, 0, column * 280, rowIndex * 280, 280, 280);
+      this.anims.create({ key: `goblin-${row}`, frames: [0, 1, 2, 3].map(column => ({ key: 'goblin-combat-sheet', frame: `${row}-${column}` })), frameRate: row === 'attack' || row === 'hurt' ? 12 : 9, repeat: row === 'idle' ? -1 : 0 });
     });
     const skeletonCombat = this.textures.get('skeleton-combat-sheet');
     ['idle', 'attack', 'guard', 'hurt'].forEach((row, rowIndex) => {
@@ -323,10 +330,11 @@ class BattleScene extends Phaser.Scene {
 
   setEnemyPose(pose, hold = false) {
     if (!this.enemyConfig.combatSheet || !this.enemyFigure?.active) return;
-    this.enemyFigure.play(`skeleton-${pose}`, true);
+    const prefix = this.enemyConfig.combatAnimKey;
+    this.enemyFigure.play(`${prefix}-${pose}`, true);
     if (!hold && pose !== 'idle') {
       this.enemyFigure.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
-        if (!this.over && this.enemyFigure?.active) this.enemyFigure.play('skeleton-idle', true);
+        if (!this.over && this.enemyFigure?.active) this.enemyFigure.play(`${prefix}-idle`, true);
       });
     }
   }
@@ -437,7 +445,7 @@ class BattleScene extends Phaser.Scene {
     this.enemyName.setText(enemy.displayName);
     if (this.enemyFigure) this.enemyFigure.destroy();
     this.enemyFigure = enemy.combatSheet
-      ? this.add.sprite(enemy.sprite.x, enemy.sprite.y, enemy.sprite.texture, enemy.sprite.frame).setOrigin(.5, .9286).setScale(enemy.sprite.scale / 280).setFlipX(enemy.sprite.flipX).play('skeleton-idle')
+      ? this.add.sprite(enemy.sprite.x, enemy.sprite.y, enemy.sprite.texture, enemy.sprite.frame).setOrigin(.5, .9286).setScale(enemy.sprite.scale / 280).setFlipX(enemy.sprite.flipX).play(`${enemy.combatAnimKey}-idle`)
       : pixelSprite(this, enemy.sprite.x, enemy.sprite.y, enemy.sprite.texture, enemy.sprite.frame, enemy.sprite.scale).setFlipX(enemy.sprite.flipX);
     this.goblinBasePose = enemy.id === 'goblin'
       ? { x: this.enemyFigure.x, y: this.enemyFigure.y, scaleX: this.enemyFigure.scaleX, scaleY: this.enemyFigure.scaleY, angle: this.enemyFigure.angle }
@@ -735,7 +743,7 @@ class BattleScene extends Phaser.Scene {
     }
     else this.flashCombatant('player', 0xeb5b67, false);
     this.showFloatingText(this.playerFigure.x, this.playerFigure.y - 58, `-${outcome.enemyDamage}`, blocked ? '#9fdcff' : '#ffb1b8', blocked);
-    if (outcome.causesDown) this.setPlayerPose('hurt', true);
+    if (outcome.causesDown) this.setPlayerPose('down', true);
     audio.play(blocked ? 'defend' : 'hit');
   }
 
@@ -754,7 +762,11 @@ class BattleScene extends Phaser.Scene {
     this.downTurns = outcome.causesDown ? 1 : outcome.startedDown ? 0 : 0;
     this.turn += 1;
     this.log = outcome.line;
-    if (!this.isDown()) this.setPlayerPose('idle', true);
+    if (this.isDown()) this.setPlayerPose('down', true);
+    else if (outcome.startedDown) {
+      this.setPlayerPose('hurt', true);
+      this.scheduleResolution(260, () => { if (!this.over) this.setPlayerPose('idle', true); });
+    } else this.setPlayerPose('idle', true);
     this.setEnemyPose('idle', true);
     this.resetGoblinPose();
     this.inputLocked = false;
@@ -764,10 +776,11 @@ class BattleScene extends Phaser.Scene {
   resolveTutorialTurn(action, fromPointer) {
     const outcome = this.tutorialOutcome(action);
     const playerStrike = action === 'attack' || action === 'finisher';
-    const strikeDuration = action === 'finisher' ? 460 : 360;
+    const strikeDuration = action === 'finisher' ? 560 : 360;
     const beginPlayerStrike = () => {
-      this.setPlayerPose('attack', true);
+      this.setPlayerPose(action === 'finisher' ? 'heavy' : 'attack', true);
       this.animateLunge('player', action === 'finisher');
+      if (action === 'finisher') this.cameras.main.shake(110, .004);
       audio.play(action === 'finisher' ? 'finisher' : 'attack');
     };
     const beginEnemyStrike = () => {
@@ -801,7 +814,7 @@ class BattleScene extends Phaser.Scene {
       if (playerStrike) {
         this.scheduleResolution(360, beginPlayerStrike);
         this.scheduleResolution(360 + strikeDuration, () => this.applyTutorialEnemyHit(outcome));
-        this.scheduleResolution(1180, finish);
+        this.scheduleResolution(action === 'finisher' ? 1320 : 1180, finish);
       } else if (action === 'defend') {
         beginPlayerGuard();
         this.scheduleResolution(980, finish);
