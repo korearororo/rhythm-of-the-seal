@@ -438,6 +438,9 @@ class BattleScene extends Phaser.Scene {
     this.enemyFigure = enemy.combatSheet
       ? this.add.sprite(enemy.sprite.x, enemy.sprite.y, enemy.sprite.texture, enemy.sprite.frame).setOrigin(.5, .9286).setScale(enemy.sprite.scale / 280).setFlipX(enemy.sprite.flipX).play('skeleton-idle')
       : pixelSprite(this, enemy.sprite.x, enemy.sprite.y, enemy.sprite.texture, enemy.sprite.frame, enemy.sprite.scale).setFlipX(enemy.sprite.flipX);
+    this.goblinBasePose = enemy.id === 'goblin'
+      ? { x: this.enemyFigure.x, y: this.enemyFigure.y, scaleX: this.enemyFigure.scaleX, scaleY: this.enemyFigure.scaleY, angle: this.enemyFigure.angle }
+      : null;
     this.rhythm = 0; this.turn = 0; this.over = false;
     this.downTurns = 0;
     this.phase = 1; this.sealBroken = false; this.lastIntentKey = null;
@@ -470,8 +473,8 @@ class BattleScene extends Phaser.Scene {
     this.tweens.add({ targets: popup, y: y - (emphatic ? 64 : 46), alpha: 0, scaleX: emphatic ? 1.25 : 1, scaleY: emphatic ? 1.25 : 1, duration: emphatic ? 1000 : 800, ease: 'Cubic.Out', onComplete: () => popup.destroy() });
   }
 
-  playEffect(frame, x, y, size = 104, emphatic = false, duration = emphatic ? 440 : 300) {
-    const effect = pixelSprite(this, x, y, 'combat-effects', frame, size).setDepth(15).setAlpha(.92);
+  playEffect(frame, x, y, size = 104, emphatic = false, duration = emphatic ? 440 : 300, depth = 15) {
+    const effect = pixelSprite(this, x, y, 'combat-effects', frame, size).setOrigin(.5).setDepth(depth).setAlpha(.92);
     const baseScale = effect.scaleX;
     this.tweens.add({ targets: effect, alpha: 0, scaleX: baseScale * (emphatic ? 1.45 : 1.25), scaleY: baseScale * (emphatic ? 1.45 : 1.25), duration, ease: 'Quad.Out', onComplete: () => effect.destroy() });
   }
@@ -489,12 +492,33 @@ class BattleScene extends Phaser.Scene {
 
   showGuard(side, emphatic = false) {
     const figure = side === 'player' ? this.playerFigure : this.enemyFigure;
+    const compactGoblinGuard = side === 'enemy' && this.enemyConfig.id === 'goblin';
     figure.setTint(0x83d6ff);
     this.time.delayedCall(emphatic ? 520 : 440, () => {
       if (figure?.active) figure.clearTint();
     });
-    this.playEffect('guard', figure.x, figure.y, emphatic ? 128 : 112, emphatic, emphatic ? 620 : 520);
+    this.playEffect('guard', figure.x, figure.y, compactGoblinGuard ? (emphatic ? 94 : 80) : (emphatic ? 128 : 112), emphatic, emphatic ? 620 : 520, compactGoblinGuard ? 5 : 15);
     audio.play('defend');
+  }
+
+  animateGoblinGuard(impact = false) {
+    if (this.enemyConfig.id !== 'goblin' || !this.enemyFigure?.active) return;
+    const figure = this.enemyFigure;
+    const base = this.goblinBasePose || { x: figure.x, y: figure.y, scaleX: figure.scaleX, scaleY: figure.scaleY, angle: 0 };
+    this.tweens.killTweensOf(figure);
+    if (!impact) {
+      figure.setPosition(base.x, base.y).setScale(base.scaleX, base.scaleY).setAngle(0);
+      this.tweens.add({ targets: figure, x: base.x - 13, y: base.y + 3, angle: -10, scaleX: base.scaleX * 1.06, scaleY: base.scaleY * .95, duration: 220, ease: 'Cubic.Out' });
+      return;
+    }
+    this.tweens.add({ targets: figure, x: base.x - 18, y: base.y + 5, angle: -14, duration: 80, yoyo: true, hold: 100, ease: 'Quad.Out' });
+  }
+
+  resetGoblinPose() {
+    if (this.enemyConfig.id !== 'goblin' || !this.enemyFigure?.active || !this.goblinBasePose) return;
+    this.tweens.killTweensOf(this.enemyFigure);
+    const base = this.goblinBasePose;
+    this.enemyFigure.setPosition(base.x, base.y).setScale(base.scaleX, base.scaleY).setAngle(base.angle);
   }
 
   animateLunge(side, emphatic = false) {
@@ -652,6 +676,7 @@ class BattleScene extends Phaser.Scene {
 
   showEnemyGuard() {
     this.setEnemyPose('guard', true);
+    this.animateGoblinGuard();
     this.showGuard('enemy');
   }
 
@@ -660,13 +685,17 @@ class BattleScene extends Phaser.Scene {
     this.resolutionPhase = 'collision';
     this.setHealth('enemy', this.enemyHp - outcome.playerDamage);
     const guarded = outcome.enemy.key === 'defend';
-    if (guarded) this.showGuard('enemy', true);
+    if (guarded) {
+      this.animateGoblinGuard(true);
+      this.showGuard('enemy', true);
+    }
     else {
       this.setEnemyPose('hurt', true);
       this.flashCombatant('enemy', 0xeb5b67, outcome.action === 'finisher');
     }
     // 왼쪽의 기사가 내리친 지점에 효과를 두어, 방어 중인 적의 몸통·가드 효과를 덮지 않는다.
-    this.playEffect('attack', this.enemyFigure.x - (guarded ? 54 : 34), this.enemyFigure.y, outcome.action === 'finisher' ? 122 : 90, outcome.action === 'finisher');
+    const impactX = this.enemyFigure.x - (guarded ? 155 : 88);
+    this.playEffect('attack', impactX, this.enemyFigure.y - 4, outcome.action === 'finisher' ? 112 : (guarded ? 60 : 78), outcome.action === 'finisher', undefined, 6);
     this.showFloatingText(this.enemyFigure.x, this.enemyFigure.y - 58, `-${outcome.playerDamage}`, '#ffb1b8', outcome.action === 'finisher');
   }
 
@@ -699,6 +728,7 @@ class BattleScene extends Phaser.Scene {
     this.log = outcome.line;
     if (!this.isDown()) this.setPlayerPose('idle', true);
     this.setEnemyPose('idle', true);
+    this.resetGoblinPose();
     this.inputLocked = false;
     this.render();
   }
