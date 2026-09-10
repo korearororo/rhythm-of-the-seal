@@ -98,7 +98,8 @@ const ENEMY_PRESETS = {
     displayName: '고블린 정찰병',
     logName: '고블린 정찰병',
     maxHp: 40,
-    sprite: { texture: 'characters', frame: 'goblin', x: 755, y: 225, scale: 164, flipX: true },
+    // 원본 고블린은 왼쪽을 향한다. 오른쪽에 배치하므로 뒤집지 않아야 기사와 마주 본다.
+    sprite: { texture: 'characters', frame: 'goblin', x: 755, y: 225, scale: 164, flipX: false },
     // 튜토리얼은 화면에 순서를 노출하지 않는 공격→방어 고정 반복이다.
     intentSequence: ['attack', 'defend'],
     encounterLabel: '고블린 정찰병과 조우했다',
@@ -439,13 +440,13 @@ class BattleScene extends Phaser.Scene {
     this.tweens.add({ targets: popup, y: y - (emphatic ? 64 : 46), alpha: 0, scaleX: emphatic ? 1.25 : 1, scaleY: emphatic ? 1.25 : 1, duration: emphatic ? 1000 : 800, ease: 'Cubic.Out', onComplete: () => popup.destroy() });
   }
 
-  playEffect(frame, x, y, size = 104, emphatic = false) {
+  playEffect(frame, x, y, size = 104, emphatic = false, duration = emphatic ? 440 : 300) {
     const effect = pixelSprite(this, x, y, 'combat-effects', frame, size).setDepth(15).setAlpha(.92);
     const baseScale = effect.scaleX;
-    this.tweens.add({ targets: effect, alpha: 0, scaleX: baseScale * (emphatic ? 1.45 : 1.25), scaleY: baseScale * (emphatic ? 1.45 : 1.25), duration: emphatic ? 440 : 300, ease: 'Quad.Out', onComplete: () => effect.destroy() });
+    this.tweens.add({ targets: effect, alpha: 0, scaleX: baseScale * (emphatic ? 1.45 : 1.25), scaleY: baseScale * (emphatic ? 1.45 : 1.25), duration, ease: 'Quad.Out', onComplete: () => effect.destroy() });
   }
 
-  flashCombatant(side, color, emphatic = false) {
+  flashCombatant(side, color, emphatic = false, knockback = true) {
     const figure = side === 'player' ? this.playerFigure : this.enemyFigure;
     // 이전의 반투명 사각형은 프레임 위에 빨강/파랑 배경 잔상처럼 보였다.
     // 캐릭터 픽셀만 짧게 틴트해 피격·방어를 구분한다.
@@ -453,7 +454,17 @@ class BattleScene extends Phaser.Scene {
     this.time.delayedCall(emphatic ? 280 : 180, () => {
       if (figure?.active) figure.clearTint();
     });
-    this.tweens.add({ targets: figure, x: figure.x + (side === 'player' ? -8 : 8), duration: emphatic ? 55 : 75, yoyo: true, repeat: emphatic ? 2 : 1 });
+    if (knockback) this.tweens.add({ targets: figure, x: figure.x + (side === 'player' ? -8 : 8), duration: emphatic ? 55 : 75, yoyo: true, repeat: emphatic ? 2 : 1 });
+  }
+
+  showGuard(side, emphatic = false) {
+    const figure = side === 'player' ? this.playerFigure : this.enemyFigure;
+    figure.setTint(0x83d6ff);
+    this.time.delayedCall(emphatic ? 520 : 440, () => {
+      if (figure?.active) figure.clearTint();
+    });
+    this.playEffect('guard', figure.x, figure.y, emphatic ? 128 : 112, emphatic, emphatic ? 620 : 520);
+    audio.play('defend');
   }
 
   animateLunge(side, emphatic = false) {
@@ -610,17 +621,18 @@ class BattleScene extends Phaser.Scene {
   }
 
   showEnemyGuard() {
-    this.flashCombatant('enemy', 0x83d6ff, false);
-    this.playEffect('guard', this.enemyFigure.x, this.enemyFigure.y, 100);
-    audio.play('defend');
+    this.showGuard('enemy');
   }
 
   applyTutorialEnemyHit(outcome) {
     if (!outcome.playerDamage || this.enemyHp <= 0) return;
     this.resolutionPhase = 'collision';
     this.setHealth('enemy', this.enemyHp - outcome.playerDamage);
-    this.flashCombatant('enemy', 0xeb5b67, outcome.action === 'finisher');
-    this.playEffect('attack', this.enemyFigure.x, this.enemyFigure.y, outcome.action === 'finisher' ? 132 : 106, outcome.action === 'finisher');
+    const guarded = outcome.enemy.key === 'defend';
+    if (guarded) this.showGuard('enemy', true);
+    else this.flashCombatant('enemy', 0xeb5b67, outcome.action === 'finisher');
+    // 왼쪽의 기사가 내리친 지점에 효과를 두어, 방어 중인 적의 몸통·가드 효과를 덮지 않는다.
+    this.playEffect('attack', this.enemyFigure.x - (guarded ? 54 : 34), this.enemyFigure.y, outcome.action === 'finisher' ? 122 : 90, outcome.action === 'finisher');
     this.showFloatingText(this.enemyFigure.x, this.enemyFigure.y - 58, `-${outcome.playerDamage}`, '#ffb1b8', outcome.action === 'finisher');
   }
 
@@ -629,7 +641,8 @@ class BattleScene extends Phaser.Scene {
     this.resolutionPhase = 'collision';
     this.setHealth('player', this.playerHp - outcome.enemyDamage);
     const blocked = outcome.action === 'defend';
-    this.flashCombatant('player', blocked ? 0x83d6ff : 0xeb5b67, blocked);
+    if (blocked) this.showGuard('player', true);
+    else this.flashCombatant('player', 0xeb5b67, false);
     this.showFloatingText(this.playerFigure.x, this.playerFigure.y - 58, `-${outcome.enemyDamage}`, blocked ? '#9fdcff' : '#ffb1b8', blocked);
     if (outcome.causesDown) this.setPlayerPose('hurt', true);
     audio.play(blocked ? 'defend' : 'hit');
@@ -669,7 +682,7 @@ class BattleScene extends Phaser.Scene {
       this.animateLunge('enemy');
       audio.play('enemyAttack');
     };
-    const beginPlayerGuard = () => { this.setPlayerPose('guard', true); this.playEffect('guard', this.playerFigure.x, this.playerFigure.y, 106); audio.play('defend'); };
+    const beginPlayerGuard = () => { this.setPlayerPose('guard', true); this.showGuard('player'); };
     const beginFocus = () => { this.setPlayerPose('focus', true); audio.play('focus'); };
     const finish = () => this.finishTutorialTurn(outcome);
 
@@ -697,7 +710,6 @@ class BattleScene extends Phaser.Scene {
         this.scheduleResolution(1180, finish);
       } else if (action === 'defend') {
         beginPlayerGuard();
-        this.scheduleResolution(360, this.showEnemyGuard.bind(this));
         this.scheduleResolution(980, finish);
       } else {
         beginFocus();
