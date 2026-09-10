@@ -363,7 +363,8 @@ class BattleScene extends Phaser.Scene {
     this.playerHpText = this.text(38, 315, '', 12); this.enemyHpText = this.text(650, 315, '', 12);
     this.playerBar = this.add.rectangle(138, 345, 200, 16, this.colors.hp).setStrokeStyle(2, 0xf8f1ff); this.enemyBar = this.add.rectangle(750, 345, 200, 16, this.colors.green).setStrokeStyle(2, 0xf8f1ff);
     this.hpBarTweens = { player: null, enemy: null };
-    this.playerFigure = this.add.sprite(145, 225, 'novice-combat-sheet', 'idle-0').setScale(164 / 280).play('novice-idle');
+    // 전투 시트 원본은 왼쪽을 향한다. 좌측의 기사는 뒤집어 오른쪽 적을 향한다.
+    this.playerFigure = this.add.sprite(145, 225, 'novice-combat-sheet', 'idle-0').setScale(164 / 280).setFlipX(true).play('novice-idle');
     this.enemyFigure = null;
     this.sealText = this.text(750, 359, '', 11, '#ffd56a', 'center');
     this.phaseText = this.text(450, 170, '', 12, '#ffd56a', 'center');
@@ -512,6 +513,30 @@ class BattleScene extends Phaser.Scene {
       return;
     }
     this.tweens.add({ targets: figure, x: base.x - 18, y: base.y + 5, angle: -14, duration: 80, yoyo: true, hold: 100, ease: 'Quad.Out' });
+  }
+
+  animateGuardParry(side) {
+    const figure = side === 'player' ? this.playerFigure : this.enemyFigure;
+    if (!figure?.active) return;
+    if (side === 'enemy' && this.enemyConfig.id === 'goblin') {
+      this.animateGoblinGuard(true);
+      return;
+    }
+    const baseX = figure.x;
+    const baseY = figure.y;
+    const baseAngle = figure.angle;
+    const shift = side === 'player' ? 7 : -7;
+    this.tweens.add({
+      targets: figure,
+      x: baseX + shift,
+      y: baseY + 2,
+      angle: baseAngle + (side === 'player' ? 7 : -7),
+      duration: 70,
+      yoyo: true,
+      hold: 100,
+      ease: 'Quad.Out',
+      onComplete: () => { if (figure?.active) figure.setPosition(baseX, baseY).setAngle(baseAngle); },
+    });
   }
 
   resetGoblinPose() {
@@ -686,7 +711,7 @@ class BattleScene extends Phaser.Scene {
     this.setHealth('enemy', this.enemyHp - outcome.playerDamage);
     const guarded = outcome.enemy.key === 'defend';
     if (guarded) {
-      this.animateGoblinGuard(true);
+      this.animateGuardParry('enemy');
       this.showGuard('enemy', true);
     }
     else {
@@ -704,7 +729,10 @@ class BattleScene extends Phaser.Scene {
     this.resolutionPhase = 'collision';
     this.setHealth('player', this.playerHp - outcome.enemyDamage);
     const blocked = outcome.action === 'defend';
-    if (blocked) this.showGuard('player', true);
+    if (blocked) {
+      this.showGuard('player', true);
+      this.animateGuardParry('player');
+    }
     else this.flashCombatant('player', 0xeb5b67, false);
     this.showFloatingText(this.playerFigure.x, this.playerFigure.y - 58, `-${outcome.enemyDamage}`, blocked ? '#9fdcff' : '#ffb1b8', blocked);
     if (outcome.causesDown) this.setPlayerPose('hurt', true);
