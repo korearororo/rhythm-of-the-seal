@@ -109,8 +109,9 @@ const ENEMY_PRESETS = {
     displayName: '해골 성소지기',
     logName: '해골 성소지기',
     maxHp: 48,
-    sprite: { texture: 'skeleton-shrine-keeper', frame: 'idle', x: 760, y: 224, scale: 118, flipX: false },
-    intentSequence: ['defend', 'attack', 'charge', 'heavy', 'attack'],
+    sprite: { texture: 'skeleton-combat-sheet', frame: 'idle-0', x: 760, y: 254, scale: 164, flipX: false },
+    combatSheet: true,
+    intentSequence: ['attack', 'attack', 'defend'],
     encounterLabel: '해골 성소지기와 조우했다',
   },
   arbiter: {
@@ -196,6 +197,7 @@ class BootScene extends Phaser.Scene {
     this.load.image('seal-arbiter', 'assets/seal-arbiter.png');
     this.load.image('combat-effects', 'assets/combat-effects.png');
     this.load.image('novice-combat-sheet', 'assets/novice-combat-sheet.png');
+    this.load.image('skeleton-combat-sheet', 'assets/skeleton-shrine-keeper-combat-sheet.png');
   }
 
   create() {
@@ -235,6 +237,16 @@ class BootScene extends Phaser.Scene {
         repeat: row === 'idle' ? -1 : 0,
       });
     });
+    const skeletonCombat = this.textures.get('skeleton-combat-sheet');
+    ['idle', 'attack', 'guard', 'hurt'].forEach((row, rowIndex) => {
+      for (let column = 0; column < 4; column++) skeletonCombat.add(`${row}-${column}`, 0, column * 280, rowIndex * 280, 280, 280);
+      this.anims.create({
+        key: `skeleton-${row}`,
+        frames: [0, 1, 2, 3].map(column => ({ key: 'skeleton-combat-sheet', frame: `${row}-${column}` })),
+        frameRate: row === 'attack' || row === 'hurt' ? 12 : 9,
+        repeat: row === 'idle' ? -1 : 0,
+      });
+    });
     this.scene.start('intro');
   }
 }
@@ -258,6 +270,7 @@ class IntroScene extends Phaser.Scene {
     this.makeButton('성소 안으로', 450, 500, 220, 50, 0x765199, () => {
       this.registry.set('battleOrder', ENEMY_ORDER);
       this.registry.set('battleIndex', 0);
+      this.registry.set('carriedPlayerHp', null);
       this.scene.start('battle');
     });
   }
@@ -296,6 +309,8 @@ class BattleScene extends Phaser.Scene {
 
   isTutorial() { return this.enemyConfig.id === 'goblin'; }
 
+  isPatternEnemy() { return this.enemyConfig.id === 'goblin' || this.enemyConfig.id === 'skeleton'; }
+
   setPlayerPose(pose, hold = false) {
     if (!this.playerFigure?.active) return;
     this.playerFigure.play(`novice-${pose}`, true);
@@ -306,7 +321,17 @@ class BattleScene extends Phaser.Scene {
     }
   }
 
-  isDown() { return this.isTutorial() && this.downTurns > 0; }
+  setEnemyPose(pose, hold = false) {
+    if (!this.enemyConfig.combatSheet || !this.enemyFigure?.active) return;
+    this.enemyFigure.play(`skeleton-${pose}`, true);
+    if (!hold && pose !== 'idle') {
+      this.enemyFigure.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
+        if (!this.over && this.enemyFigure?.active) this.enemyFigure.play('skeleton-idle', true);
+      });
+    }
+  }
+
+  isDown() { return this.isPatternEnemy() && this.downTurns > 0; }
 
   clearResolutionTimers() {
     (this.resolutionTimers || []).forEach(timer => timer.remove(false));
@@ -400,14 +425,19 @@ class BattleScene extends Phaser.Scene {
     this.inputLocked = false;
     this.resolutionPhase = 'idle';
     const enemy = this.enemyConfig;
-    this.playerHp = this.playerMaxHp = 34;
+    this.playerMaxHp = 34;
+    const carriedPlayerHp = enemy.boss ? this.registry.get('carriedPlayerHp') : null;
+    this.playerHp = typeof carriedPlayerHp === 'number' ? Math.min(this.playerMaxHp, carriedPlayerHp) : this.playerMaxHp;
+    if (enemy.boss) this.registry.set('carriedPlayerHp', null);
     this.enemyHp = this.enemyMaxHp = enemy.maxHp;
     Object.values(this.hpBarTweens || {}).forEach(tween => tween?.stop());
     this.hpBarTweens = { player: null, enemy: null };
     this.intentQueue = enemy.intentSequence.map((intentKey) => ENEMY_INTENT_DEFS[intentKey]);
     this.enemyName.setText(enemy.displayName);
     if (this.enemyFigure) this.enemyFigure.destroy();
-    this.enemyFigure = pixelSprite(this, enemy.sprite.x, enemy.sprite.y, enemy.sprite.texture, enemy.sprite.frame, enemy.sprite.scale).setFlipX(enemy.sprite.flipX);
+    this.enemyFigure = enemy.combatSheet
+      ? this.add.sprite(enemy.sprite.x, enemy.sprite.y, enemy.sprite.texture, enemy.sprite.frame).setOrigin(.5, .9286).setScale(enemy.sprite.scale / 280).setFlipX(enemy.sprite.flipX).play('skeleton-idle')
+      : pixelSprite(this, enemy.sprite.x, enemy.sprite.y, enemy.sprite.texture, enemy.sprite.frame, enemy.sprite.scale).setFlipX(enemy.sprite.flipX);
     this.rhythm = 0; this.turn = 0; this.over = false;
     this.downTurns = 0;
     this.phase = 1; this.sealBroken = false; this.lastIntentKey = null;
@@ -598,13 +628,13 @@ class BattleScene extends Phaser.Scene {
     const outcome = { enemy, action, startedDown, playerDamage: 0, enemyDamage: 0, rhythmGain: 0, consumeRhythm: action === 'finisher', causesDown: false, line: '' };
     if (action === 'attack') {
       outcome.playerDamage = defendingEnemy ? 3 : 7;
-      outcome.line = defendingEnemy ? '고블린이 방어 자세로 검격을 흘렸다. 피해가 줄었다.' : '검격이 고블린에게 적중했다.';
+      outcome.line = defendingEnemy ? `${this.enemyConfig.displayName}이 방어 자세로 검격을 흘렸다. 피해가 줄었다.` : `검격이 ${this.enemyConfig.displayName}에게 적중했다.`;
     } else if (action === 'finisher') {
       outcome.playerDamage = defendingEnemy ? 8 : 16;
       outcome.line = defendingEnemy ? '강공격이 방어에 막혀 피해가 줄었다.' : '강공격! 강한 일격을 날렸다.';
     } else if (action === 'defend') {
       outcome.enemyDamage = attackingEnemy ? Math.ceil(enemy.damage / 2) : 0;
-      outcome.line = attackingEnemy ? '방패를 먼저 들어 고블린의 공격을 막았다.' : '서로 방어 자세를 취했다.';
+      outcome.line = attackingEnemy ? `방패를 먼저 들어 ${this.enemyConfig.displayName}의 공격을 막았다.` : '서로 방어 자세를 취했다.';
     } else if (action === 'focus') {
       outcome.rhythmGain = defendingEnemy ? 2 : 1;
       outcome.causesDown = attackingEnemy;
@@ -613,7 +643,7 @@ class BattleScene extends Phaser.Scene {
         outcome.enemyDamage = enemy.damage;
         outcome.line = '집중 중 공격을 맞아 다운됐다. 다음 턴에는 집중할 수 없다.';
       } else {
-        outcome.line = defendingEnemy ? '고블린이 막는 동안 기를 모았다. 리듬 +2' : '기를 모았다. 리듬 +1';
+        outcome.line = defendingEnemy ? `${this.enemyConfig.displayName}이 막는 동안 기를 모았다. 리듬 +2` : '기를 모았다. 리듬 +1';
       }
     }
     if (action !== 'defend' && attackingEnemy && action !== 'focus') outcome.enemyDamage = enemy.damage;
@@ -621,6 +651,7 @@ class BattleScene extends Phaser.Scene {
   }
 
   showEnemyGuard() {
+    this.setEnemyPose('guard', true);
     this.showGuard('enemy');
   }
 
@@ -630,7 +661,10 @@ class BattleScene extends Phaser.Scene {
     this.setHealth('enemy', this.enemyHp - outcome.playerDamage);
     const guarded = outcome.enemy.key === 'defend';
     if (guarded) this.showGuard('enemy', true);
-    else this.flashCombatant('enemy', 0xeb5b67, outcome.action === 'finisher');
+    else {
+      this.setEnemyPose('hurt', true);
+      this.flashCombatant('enemy', 0xeb5b67, outcome.action === 'finisher');
+    }
     // 왼쪽의 기사가 내리친 지점에 효과를 두어, 방어 중인 적의 몸통·가드 효과를 덮지 않는다.
     this.playEffect('attack', this.enemyFigure.x - (guarded ? 54 : 34), this.enemyFigure.y, outcome.action === 'finisher' ? 122 : 90, outcome.action === 'finisher');
     this.showFloatingText(this.enemyFigure.x, this.enemyFigure.y - 58, `-${outcome.playerDamage}`, '#ffb1b8', outcome.action === 'finisher');
@@ -650,7 +684,7 @@ class BattleScene extends Phaser.Scene {
 
   finishTutorialTurn(outcome) {
     this.resolutionPhase = 'complete';
-    if (this.enemyHp <= 0) { this.finish(true, `${outcome.line}\n고블린 정찰병을 쓰러뜨렸다!`); return; }
+    if (this.enemyHp <= 0) { this.finish(true, `${outcome.line}\n${this.enemyConfig.logName}을 쓰러뜨렸다!`); return; }
     if (this.playerHp <= 0) { this.finish(false, `${outcome.line}\n수습 기사가 쓰러졌다…`); return; }
     if (outcome.consumeRhythm) this.rhythm = 0;
     if (outcome.rhythmGain) {
@@ -664,6 +698,7 @@ class BattleScene extends Phaser.Scene {
     this.turn += 1;
     this.log = outcome.line;
     if (!this.isDown()) this.setPlayerPose('idle', true);
+    this.setEnemyPose('idle', true);
     this.inputLocked = false;
     this.render();
   }
@@ -679,6 +714,7 @@ class BattleScene extends Phaser.Scene {
     };
     const beginEnemyStrike = () => {
       if (this.enemyHp <= 0) return;
+      this.setEnemyPose('attack', true);
       this.animateLunge('enemy');
       audio.play('enemyAttack');
     };
@@ -741,7 +777,7 @@ class BattleScene extends Phaser.Scene {
   takeTurn(action, fromPointer = false) {
     if (this.over || !['attack', 'defend', 'focus', 'finisher'].includes(action) || (action === 'finisher' && this.rhythm < 3)) return;
     if (action === 'focus' && this.isDown()) return;
-    if (this.isTutorial()) {
+    if (this.isPatternEnemy()) {
       this.resolveTutorialTurn(action, fromPointer);
       return;
     }
@@ -869,6 +905,10 @@ class BattleScene extends Phaser.Scene {
     const nextIndex = this.enemyIndex + 1;
     const hasNextBattle = nextIndex < this.battleOrder.length;
     if (hasNextBattle) {
+      if (this.enemyConfig.id === 'skeleton') {
+        const recovery = Math.ceil(this.playerMaxHp * .2);
+        this.registry.set('carriedPlayerHp', Math.min(this.playerMaxHp, this.playerHp + recovery));
+      }
       this.registry.set('defeatedEnemyId', this.enemyConfig.id);
       this.registry.set('battleIndex', nextIndex);
       this.scene.start('battleTransition');
@@ -883,12 +923,13 @@ class BattleScene extends Phaser.Scene {
     const intentColors = { attack: '#ff929b', heavy: '#ffad64', defend: '#8ec5ff', charge: '#d898ff' };
     const intentColor = intentColors[enemy.key] || '#ffd56a';
     const tutorial = this.isTutorial();
-    const headline = this.over ? (this.enemyHp <= 0 ? '승리!' : '패배…') : tutorial ? '훈련: 움직임을 보고 대응하세요' : `다음 행동 예고: ${enemy.name}`;
-    const detail = this.over ? (this.enemyHp <= 0 ? '심장석의 봉인이 풀립니다.' : '다시 시작해 전투를 반복할 수 있습니다.') : tutorial ? '고블린은 공격과 방어 자세를 반복합니다.' : enemy.detail;
-    this.intentText.setText(headline).setColor(tutorial && !this.over ? '#ffd56a' : intentColor);
+    const patternEnemy = this.isPatternEnemy();
+    const headline = this.over ? (this.enemyHp <= 0 ? '승리!' : '패배…') : tutorial ? '훈련: 움직임을 보고 대응하세요' : patternEnemy ? '전투: 적의 자세를 관찰하세요' : `다음 행동 예고: ${enemy.name}`;
+    const detail = this.over ? (this.enemyHp <= 0 ? '심장석의 봉인이 풀립니다.' : '다시 시작해 전투를 반복할 수 있습니다.') : tutorial ? '고블린은 공격과 방어 자세를 반복합니다.' : patternEnemy ? '해골 성소지기는 공격과 방어 자세를 반복합니다.' : enemy.detail;
+    this.intentText.setText(headline).setColor(patternEnemy && !this.over ? '#ffd56a' : intentColor);
     this.intentDetail.setText(detail);
-    this.intentPanel.setStrokeStyle(tutorial ? 3 : enemy.key === 'heavy' ? 5 : 3, tutorial ? this.colors.gold : Phaser.Display.Color.HexStringToColor(intentColor).color);
-    if (!tutorial && !this.over && this.lastIntentKey !== enemy.key) {
+    this.intentPanel.setStrokeStyle(patternEnemy ? 3 : enemy.key === 'heavy' ? 5 : 3, patternEnemy ? this.colors.gold : Phaser.Display.Color.HexStringToColor(intentColor).color);
+    if (!patternEnemy && !this.over && this.lastIntentKey !== enemy.key) {
       this.lastIntentKey = enemy.key;
       this.animateIntent(enemy);
     }
@@ -949,7 +990,11 @@ class BattleTransitionScene extends Phaser.Scene {
     const nextEnemyName = (nextEnemy && nextEnemy.displayName) || '다음 적';
     this.add.text(WIDTH / 2, 195, `${defeatedName}을 쓰러뜨렸다.`, { fontFamily: UI_FONT, fontSize: '18px', fontStyle: 'bold', color: '#f8f1ff' }).setOrigin(.5);
     this.add.text(WIDTH / 2, 225, `${nextEnemyName}가 봉인문으로 나아온다.`, { fontFamily: UI_FONT, fontSize: '17px', color: '#c6b6d8', align: 'center' }).setOrigin(.5);
-    this.add.text(WIDTH / 2, 269, '전투 준비: HP 34로 회복 · 리듬 0으로 시작', { fontFamily: UI_FONT, fontSize: '14px', fontStyle: 'bold', color: '#ffd56a' }).setOrigin(.5);
+    const carriedPlayerHp = this.registry.get('carriedPlayerHp');
+    const preparation = currentEnemyId === 'skeleton' && typeof carriedPlayerHp === 'number'
+      ? `전투 준비: HP ${carriedPlayerHp} · 최대 HP 20% 회복 · 리듬 0으로 시작`
+      : '전투 준비: HP 34 · 리듬 0으로 시작';
+    this.add.text(WIDTH / 2, 269, preparation, { fontFamily: UI_FONT, fontSize: '14px', fontStyle: 'bold', color: '#ffd56a' }).setOrigin(.5);
     if (nextEnemy.boss) {
       this.add.text(WIDTH / 2, 311, '힘 모으기는 공격으로 끊고, 강공격은 방어로 버티세요.\n열린 봉인에 다음 행동으로 결정타를 넣으면 24 피해를 줍니다.', { fontFamily: UI_FONT, fontSize: '14px', color: '#f8f1ff', align: 'center', lineSpacing: 9 }).setOrigin(.5);
     }
