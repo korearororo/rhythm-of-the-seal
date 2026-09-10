@@ -336,6 +336,7 @@ class BattleScene extends Phaser.Scene {
     this.enemyName = this.text(650, 290, '', 16);
     this.playerHpText = this.text(38, 315, '', 12); this.enemyHpText = this.text(650, 315, '', 12);
     this.playerBar = this.add.rectangle(138, 345, 200, 16, this.colors.hp).setStrokeStyle(2, 0xf8f1ff); this.enemyBar = this.add.rectangle(750, 345, 200, 16, this.colors.green).setStrokeStyle(2, 0xf8f1ff);
+    this.hpBarTweens = { player: null, enemy: null };
     this.playerFigure = this.add.sprite(145, 225, 'novice-combat-sheet', 'idle-0').setScale(164 / 280).play('novice-idle');
     this.enemyFigure = null;
     this.sealText = this.text(750, 359, '', 11, '#ffd56a', 'center');
@@ -400,6 +401,8 @@ class BattleScene extends Phaser.Scene {
     const enemy = this.enemyConfig;
     this.playerHp = this.playerMaxHp = 34;
     this.enemyHp = this.enemyMaxHp = enemy.maxHp;
+    Object.values(this.hpBarTweens || {}).forEach(tween => tween?.stop());
+    this.hpBarTweens = { player: null, enemy: null };
     this.intentQueue = enemy.intentSequence.map((intentKey) => ENEMY_INTENT_DEFS[intentKey]);
     this.enemyName.setText(enemy.displayName);
     if (this.enemyFigure) this.enemyFigure.destroy();
@@ -412,7 +415,7 @@ class BattleScene extends Phaser.Scene {
     this.sealRune = enemy.boss ? pixelSprite(this, 748, 200, 'shrine-kit', 'rune', 120, .5).setVisible(false) : null;
     this.restartButton.container.setVisible(false); Object.entries(this.buttons).forEach(([key, b]) => { if (key !== 'restart') b.container.setVisible(true); });
     this.setPlayerPose('idle', true);
-    this.log = '예고를 읽고 행동을 고르세요.'; this.render();
+    this.log = '예고를 읽고 행동을 고르세요.'; this.render(true);
   }
 
   currentIntent() {
@@ -444,8 +447,12 @@ class BattleScene extends Phaser.Scene {
 
   flashCombatant(side, color, emphatic = false) {
     const figure = side === 'player' ? this.playerFigure : this.enemyFigure;
-    const flash = this.add.rectangle(figure.x, figure.y, 112, 100, color, emphatic ? .8 : .55).setDepth(10);
-    this.tweens.add({ targets: flash, alpha: 0, duration: emphatic ? 310 : 190, onComplete: () => flash.destroy() });
+    // 이전의 반투명 사각형은 프레임 위에 빨강/파랑 배경 잔상처럼 보였다.
+    // 캐릭터 픽셀만 짧게 틴트해 피격·방어를 구분한다.
+    figure.setTint(color);
+    this.time.delayedCall(emphatic ? 280 : 180, () => {
+      if (figure?.active) figure.clearTint();
+    });
     this.tweens.add({ targets: figure, x: figure.x + (side === 'player' ? -8 : 8), duration: emphatic ? 55 : 75, yoyo: true, repeat: emphatic ? 2 : 1 });
   }
 
@@ -455,11 +462,52 @@ class BattleScene extends Phaser.Scene {
     this.tweens.add({
       targets: figure,
       x: figure.x + distance,
-      duration: emphatic ? 85 : 105,
+      duration: emphatic ? 145 : 150,
       yoyo: true,
-      hold: emphatic ? 55 : 20,
+      hold: emphatic ? 100 : 80,
       ease: 'Cubic.Out',
     });
+  }
+
+  setHealth(side, value, animate = true) {
+    const isPlayer = side === 'player';
+    const hpKey = isPlayer ? 'playerHp' : 'enemyHp';
+    const maxKey = isPlayer ? 'playerMaxHp' : 'enemyMaxHp';
+    const bar = isPlayer ? this.playerBar : this.enemyBar;
+    const text = isPlayer ? this.playerHpText : this.enemyHpText;
+    const barStart = isPlayer ? 38 : 650;
+    this[hpKey] = Math.max(0, Math.min(this[maxKey], value));
+    text.setText(`HP ${this[hpKey]} / ${this[maxKey]}`);
+    const targetWidth = 200 * this[hpKey] / this[maxKey];
+    this.hpBarTweens[side]?.stop();
+    this.hpBarTweens[side] = null;
+    const placeBar = () => { bar.x = barStart + bar.displayWidth / 2; };
+    if (!animate || Math.abs(bar.displayWidth - targetWidth) < .1) {
+      bar.displayWidth = targetWidth;
+      placeBar();
+      return;
+    }
+    this.hpBarTweens[side] = this.tweens.add({
+      targets: bar,
+      displayWidth: targetWidth,
+      duration: 320,
+      ease: 'Cubic.Out',
+      onUpdate: placeBar,
+      onComplete: () => { this.hpBarTweens[side] = null; placeBar(); },
+    });
+  }
+
+  refreshHealthUi(force = false) {
+    const refresh = (side) => {
+      const isPlayer = side === 'player';
+      const hp = this[isPlayer ? 'playerHp' : 'enemyHp'];
+      const maxHp = this[isPlayer ? 'playerMaxHp' : 'enemyMaxHp'];
+      const text = isPlayer ? this.playerHpText : this.enemyHpText;
+      text.setText(`HP ${hp} / ${maxHp}`);
+      if (force || !this.hpBarTweens?.[side]) this.setHealth(side, hp, false);
+    };
+    refresh('player');
+    refresh('enemy');
   }
 
   animateFocus(emphatic = false) {
@@ -570,7 +618,7 @@ class BattleScene extends Phaser.Scene {
   applyTutorialEnemyHit(outcome) {
     if (!outcome.playerDamage || this.enemyHp <= 0) return;
     this.resolutionPhase = 'collision';
-    this.enemyHp = Math.max(0, this.enemyHp - outcome.playerDamage);
+    this.setHealth('enemy', this.enemyHp - outcome.playerDamage);
     this.flashCombatant('enemy', 0xeb5b67, outcome.action === 'finisher');
     this.playEffect('attack', this.enemyFigure.x, this.enemyFigure.y, outcome.action === 'finisher' ? 132 : 106, outcome.action === 'finisher');
     this.showFloatingText(this.enemyFigure.x, this.enemyFigure.y - 58, `-${outcome.playerDamage}`, '#ffb1b8', outcome.action === 'finisher');
@@ -579,7 +627,7 @@ class BattleScene extends Phaser.Scene {
   applyTutorialPlayerHit(outcome) {
     if (!outcome.enemyDamage || this.playerHp <= 0 || this.enemyHp <= 0) return;
     this.resolutionPhase = 'collision';
-    this.playerHp = Math.max(0, this.playerHp - outcome.enemyDamage);
+    this.setHealth('player', this.playerHp - outcome.enemyDamage);
     const blocked = outcome.action === 'defend';
     this.flashCombatant('player', blocked ? 0x83d6ff : 0xeb5b67, blocked);
     this.showFloatingText(this.playerFigure.x, this.playerFigure.y - 58, `-${outcome.enemyDamage}`, blocked ? '#9fdcff' : '#ffb1b8', blocked);
@@ -610,7 +658,7 @@ class BattleScene extends Phaser.Scene {
   resolveTutorialTurn(action, fromPointer) {
     const outcome = this.tutorialOutcome(action);
     const playerStrike = action === 'attack' || action === 'finisher';
-    const strikeDuration = action === 'finisher' ? 180 : 120;
+    const strikeDuration = action === 'finisher' ? 460 : 360;
     const beginPlayerStrike = () => {
       this.setPlayerPose('attack', true);
       this.animateLunge('player', action === 'finisher');
@@ -644,37 +692,37 @@ class BattleScene extends Phaser.Scene {
     if (outcome.enemy.key === 'defend') {
       this.showEnemyGuard();
       if (playerStrike) {
-        this.scheduleResolution(170, beginPlayerStrike);
-        this.scheduleResolution(170 + strikeDuration, () => this.applyTutorialEnemyHit(outcome));
-        this.scheduleResolution(470, finish);
+        this.scheduleResolution(360, beginPlayerStrike);
+        this.scheduleResolution(360 + strikeDuration, () => this.applyTutorialEnemyHit(outcome));
+        this.scheduleResolution(1180, finish);
       } else if (action === 'defend') {
         beginPlayerGuard();
-        this.scheduleResolution(130, this.showEnemyGuard.bind(this));
-        this.scheduleResolution(410, finish);
+        this.scheduleResolution(360, this.showEnemyGuard.bind(this));
+        this.scheduleResolution(980, finish);
       } else {
         beginFocus();
-        this.scheduleResolution(190, this.showEnemyGuard.bind(this));
-        this.scheduleResolution(470, finish);
+        this.scheduleResolution(420, this.showEnemyGuard.bind(this));
+        this.scheduleResolution(1050, finish);
       }
       return;
     }
 
     if (action === 'defend') {
       beginPlayerGuard();
-      this.scheduleResolution(210, beginEnemyStrike);
-      this.scheduleResolution(390, () => this.applyTutorialPlayerHit(outcome));
-      this.scheduleResolution(620, finish);
+      this.scheduleResolution(440, beginEnemyStrike);
+      this.scheduleResolution(780, () => this.applyTutorialPlayerHit(outcome));
+      this.scheduleResolution(1200, finish);
     } else if (action === 'focus') {
       beginFocus();
-      this.scheduleResolution(210, beginEnemyStrike);
-      this.scheduleResolution(390, () => this.applyTutorialPlayerHit(outcome));
-      this.scheduleResolution(650, finish);
+      this.scheduleResolution(460, beginEnemyStrike);
+      this.scheduleResolution(800, () => this.applyTutorialPlayerHit(outcome));
+      this.scheduleResolution(1250, finish);
     } else {
       beginPlayerStrike();
       this.scheduleResolution(strikeDuration, () => this.applyTutorialEnemyHit(outcome));
-      this.scheduleResolution(330 + strikeDuration, beginEnemyStrike);
-      this.scheduleResolution(510 + strikeDuration, () => this.applyTutorialPlayerHit(outcome));
-      this.scheduleResolution(740 + strikeDuration, finish);
+      this.scheduleResolution(420 + strikeDuration, beginEnemyStrike);
+      this.scheduleResolution(760 + strikeDuration, () => this.applyTutorialPlayerHit(outcome));
+      this.scheduleResolution(1140 + strikeDuration, finish);
     }
   }
 
@@ -715,7 +763,8 @@ class BattleScene extends Phaser.Scene {
       playerDamage = this.enemyConfig.boss && wasExposed ? this.enemyConfig.boss.exposedFinisherDamage : 16;
       this.rhythm = 0; lines.push(playerDamage === 24 ? '봉인 파쇄! 노출 결정타 24 피해!' : '결정타! 방어를 꿰뚫는 일격을 날렸다.');
     }
-    this.enemyHp = Math.max(0, this.enemyHp - playerDamage); this.rhythm = Math.min(3, this.rhythm + rhythmGain);
+    if (playerDamage) this.setHealth('enemy', this.enemyHp - playerDamage);
+    this.rhythm = Math.min(3, this.rhythm + rhythmGain);
     if (playerDamage) {
       this.flashCombatant('enemy', chargeInterrupted ? 0xffd56a : 0xeb5b67, chargeInterrupted);
       this.playEffect('attack', this.enemyFigure.x, this.enemyFigure.y, chargeInterrupted ? 132 : 106, chargeInterrupted);
@@ -745,7 +794,7 @@ class BattleScene extends Phaser.Scene {
     else if (enemy.damage) {
       this.animateLunge('enemy', enemy.key === 'heavy');
       audio.play(enemy.key === 'heavy' ? 'heavy' : 'enemyAttack');
-      this.playerHp = Math.max(0, this.playerHp - enemyDamage); lines.push(`${this.enemyConfig.logName}의 ${enemy.name}: ${enemyDamage} 피해`);
+      this.setHealth('player', this.playerHp - enemyDamage); lines.push(`${this.enemyConfig.logName}의 ${enemy.name}: ${enemyDamage} 피해`);
       const blockedHeavy = enemy.key === 'heavy' && action === 'defend';
       this.flashCombatant('player', blockedHeavy ? 0x83d6ff : 0xeb5b67, blockedHeavy);
       this.showFloatingText(this.playerFigure.x, this.playerFigure.y - 58, `-${enemyDamage}`, blockedHeavy ? '#9fdcff' : '#ffb1b8', blockedHeavy);
@@ -817,7 +866,7 @@ class BattleScene extends Phaser.Scene {
     this.scene.start('ending');
   }
 
-  render() {
+  render(forceHealthSync = false) {
     const enemy = this.currentIntent();
     const intentColors = { attack: '#ff929b', heavy: '#ffad64', defend: '#8ec5ff', charge: '#d898ff' };
     const intentColor = intentColors[enemy.key] || '#ffd56a';
@@ -831,9 +880,7 @@ class BattleScene extends Phaser.Scene {
       this.lastIntentKey = enemy.key;
       this.animateIntent(enemy);
     }
-    this.playerHpText.setText(`HP ${this.playerHp} / ${this.playerMaxHp}`); this.enemyHpText.setText(`HP ${this.enemyHp} / ${this.enemyMaxHp}`);
-    this.playerBar.displayWidth = 200 * this.playerHp / this.playerMaxHp; this.enemyBar.displayWidth = 200 * this.enemyHp / this.enemyMaxHp;
-    this.playerBar.x = 38 + this.playerBar.displayWidth / 2; this.enemyBar.x = 650 + this.enemyBar.displayWidth / 2;
+    this.refreshHealthUi(forceHealthSync);
     this.rhythmBoxes.forEach((box, i) => box.setFillStyle(i < this.rhythm ? this.colors.gold : 0x362746)); this.rhythmText.setText(`${this.rhythm} / 3`);
     this.updateActionInputs();
     const finisher = this.buttons.finisher; finisher.bg.setFillStyle(finisher.color);
