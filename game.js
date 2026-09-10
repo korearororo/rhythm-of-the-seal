@@ -99,7 +99,8 @@ const ENEMY_PRESETS = {
     logName: '고블린 정찰병',
     maxHp: 40,
     sprite: { texture: 'characters', frame: 'goblin', x: 755, y: 225, scale: 164, flipX: true },
-    intentSequence: ['attack', 'defend', 'charge', 'heavy'],
+    // 튜토리얼은 화면에 순서를 노출하지 않는 공격→방어 고정 반복이다.
+    intentSequence: ['attack', 'defend'],
     encounterLabel: '고블린 정찰병과 조우했다',
   },
   skeleton: {
@@ -193,6 +194,7 @@ class BootScene extends Phaser.Scene {
     this.load.image('skeleton-shrine-keeper', 'assets/skeleton-shrine-keeper.png');
     this.load.image('seal-arbiter', 'assets/seal-arbiter.png');
     this.load.image('combat-effects', 'assets/combat-effects.png');
+    this.load.image('novice-combat-sheet', 'assets/novice-combat-sheet.png');
   }
 
   create() {
@@ -219,6 +221,19 @@ class BootScene extends Phaser.Scene {
     effects.add('attack', 0, 0, 0, 724, 724);
     effects.add('guard', 0, 724, 0, 724, 724);
     effects.add('rhythm', 0, 1448, 0, 724, 724);
+
+    const noviceCombat = this.textures.get('novice-combat-sheet');
+    ['idle', 'attack', 'guard', 'focus', 'hurt'].forEach((row, rowIndex) => {
+      for (let column = 0; column < 4; column++) {
+        noviceCombat.add(`${row}-${column}`, 0, column * 280, rowIndex * 280, 280, 280);
+      }
+      this.anims.create({
+        key: `novice-${row}`,
+        frames: [0, 1, 2, 3].map(column => ({ key: 'novice-combat-sheet', frame: `${row}-${column}` })),
+        frameRate: row === 'attack' || row === 'hurt' ? 12 : 9,
+        repeat: row === 'idle' ? -1 : 0,
+      });
+    });
     this.scene.start('intro');
   }
 }
@@ -278,6 +293,34 @@ class BattleScene extends Phaser.Scene {
 
   panel(x, y, w, h) { return this.add.rectangle(x, y, w, h, this.colors.panel).setStrokeStyle(3, this.colors.border); }
 
+  isTutorial() { return this.enemyConfig.id === 'goblin'; }
+
+  setPlayerPose(pose, hold = false) {
+    if (!this.playerFigure?.active) return;
+    this.playerFigure.play(`novice-${pose}`, true);
+    if (!hold && pose !== 'idle') {
+      this.playerFigure.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
+        if (!this.over && !this.isDown()) this.playerFigure.play('novice-idle', true);
+      });
+    }
+  }
+
+  isDown() { return this.isTutorial() && this.downTurns > 0; }
+
+  clearResolutionTimers() {
+    (this.resolutionTimers || []).forEach(timer => timer.remove(false));
+    this.resolutionTimers = [];
+  }
+
+  scheduleResolution(delay, callback) {
+    const timer = this.time.delayedCall(delay, () => {
+      this.resolutionTimers = this.resolutionTimers.filter(item => item !== timer);
+      callback();
+    });
+    this.resolutionTimers.push(timer);
+    return timer;
+  }
+
   buildBackground() {
     this.cameras.main.setBackgroundColor('#171024');
     this.add.rectangle(WIDTH / 2, 374, WIDTH, 235, 0x21172e);
@@ -293,10 +336,11 @@ class BattleScene extends Phaser.Scene {
     this.enemyName = this.text(650, 290, '', 16);
     this.playerHpText = this.text(38, 315, '', 12); this.enemyHpText = this.text(650, 315, '', 12);
     this.playerBar = this.add.rectangle(138, 345, 200, 16, this.colors.hp).setStrokeStyle(2, 0xf8f1ff); this.enemyBar = this.add.rectangle(750, 345, 200, 16, this.colors.green).setStrokeStyle(2, 0xf8f1ff);
-    this.playerFigure = pixelSprite(this, 145, 225, 'characters', 'novice', 164);
+    this.playerFigure = this.add.sprite(145, 225, 'novice-combat-sheet', 'idle-0').setScale(164 / 280).play('novice-idle');
     this.enemyFigure = null;
     this.sealText = this.text(750, 359, '', 11, '#ffd56a', 'center');
     this.phaseText = this.text(450, 170, '', 12, '#ffd56a', 'center');
+    this.downText = this.text(145, 365, '', 11, '#ffad64', 'center');
     this.panel(450, 421, 820, 74); this.logText = this.text(450, 390, '', 13, '#f8f1ff', 'center').setWordWrapWidth(780);
     this.text(78, 465, '리듬', 14, '#ffd56a'); this.rhythmBoxes = [0,1,2].map(i => this.add.rectangle(142 + i * 34, 474, 24, 24, 0x362746).setStrokeStyle(2, this.colors.border));
     this.rhythmText = this.text(212, 465, '', 12, '#c6b6d8');
@@ -304,7 +348,7 @@ class BattleScene extends Phaser.Scene {
     this.buttons.attack = this.makeButton('attack', '공격', 330, 478, 128, 46, 0xb8464f);
     this.buttons.defend = this.makeButton('defend', '방어', 470, 478, 128, 46, 0x477eb5);
     this.buttons.focus = this.makeButton('focus', '집중', 610, 478, 128, 46, 0x6c9b56);
-    this.buttons.finisher = this.makeButton('finisher', '결정타', 760, 478, 140, 46, 0xb37c29);
+    this.buttons.finisher = this.makeButton('finisher', '강공격', 760, 478, 140, 46, 0xb37c29);
     this.restartButton = this.makeButton('restart', '다시 시작', 450, 555, 160, 42, 0x765199);
     this.soundButton = this.makeSoundButton();
     this.restartButton.container.setVisible(false);
@@ -348,9 +392,11 @@ class BattleScene extends Phaser.Scene {
     audio.stopAll();
     if (this.victoryTimer) this.victoryTimer.remove(false);
     if (this.actionUnlockTimer) this.actionUnlockTimer.remove(false);
+    this.clearResolutionTimers();
     this.victoryTimer = null;
     this.actionUnlockTimer = null;
     this.inputLocked = false;
+    this.resolutionPhase = 'idle';
     const enemy = this.enemyConfig;
     this.playerHp = this.playerMaxHp = 34;
     this.enemyHp = this.enemyMaxHp = enemy.maxHp;
@@ -359,11 +405,13 @@ class BattleScene extends Phaser.Scene {
     if (this.enemyFigure) this.enemyFigure.destroy();
     this.enemyFigure = pixelSprite(this, enemy.sprite.x, enemy.sprite.y, enemy.sprite.texture, enemy.sprite.frame, enemy.sprite.scale).setFlipX(enemy.sprite.flipX);
     this.rhythm = 0; this.turn = 0; this.over = false;
+    this.downTurns = 0;
     this.phase = 1; this.sealBroken = false; this.lastIntentKey = null;
     this.phaseText.setText('');
     if (this.sealRune) this.sealRune.destroy();
     this.sealRune = enemy.boss ? pixelSprite(this, 748, 200, 'shrine-kit', 'rune', 120, .5).setVisible(false) : null;
     this.restartButton.container.setVisible(false); Object.entries(this.buttons).forEach(([key, b]) => { if (key !== 'restart') b.container.setVisible(true); });
+    this.setPlayerPose('idle', true);
     this.log = '예고를 읽고 행동을 고르세요.'; this.render();
   }
 
@@ -476,13 +524,167 @@ class BattleScene extends Phaser.Scene {
   updateActionInputs() {
     const enabled = !this.over && !this.inputLocked;
     Object.values(this.buttons).forEach((button) => { button.container.input.enabled = enabled; });
+    this.buttons.focus.container.input.enabled = enabled && !this.isDown();
+    this.buttons.focus.container.setAlpha(enabled && !this.isDown() ? 1 : .35);
     const finisherReady = enabled && this.rhythm === 3;
     this.buttons.finisher.container.input.enabled = finisherReady;
     this.buttons.finisher.container.setAlpha(finisherReady ? 1 : .35);
   }
 
+  tutorialOutcome(action) {
+    const enemy = this.currentIntent();
+    const startedDown = this.isDown();
+    const defendingEnemy = enemy.key === 'defend';
+    const attackingEnemy = enemy.key === 'attack';
+    const outcome = { enemy, action, startedDown, playerDamage: 0, enemyDamage: 0, rhythmGain: 0, consumeRhythm: action === 'finisher', causesDown: false, line: '' };
+    if (action === 'attack') {
+      outcome.playerDamage = defendingEnemy ? 3 : 7;
+      outcome.line = defendingEnemy ? '고블린이 방어 자세로 검격을 흘렸다. 피해가 줄었다.' : '검격이 고블린에게 적중했다.';
+    } else if (action === 'finisher') {
+      outcome.playerDamage = defendingEnemy ? 8 : 16;
+      outcome.line = defendingEnemy ? '강공격이 방어에 막혀 피해가 줄었다.' : '강공격! 강한 일격을 날렸다.';
+    } else if (action === 'defend') {
+      outcome.enemyDamage = attackingEnemy ? Math.ceil(enemy.damage / 2) : 0;
+      outcome.line = attackingEnemy ? '방패를 먼저 들어 고블린의 공격을 막았다.' : '서로 방어 자세를 취했다.';
+    } else if (action === 'focus') {
+      outcome.rhythmGain = defendingEnemy ? 2 : 1;
+      outcome.causesDown = attackingEnemy;
+      if (attackingEnemy) {
+        outcome.rhythmGain = 0;
+        outcome.enemyDamage = enemy.damage;
+        outcome.line = '집중 중 공격을 맞아 다운됐다. 다음 턴에는 집중할 수 없다.';
+      } else {
+        outcome.line = defendingEnemy ? '고블린이 막는 동안 기를 모았다. 리듬 +2' : '기를 모았다. 리듬 +1';
+      }
+    }
+    if (action !== 'defend' && attackingEnemy && action !== 'focus') outcome.enemyDamage = enemy.damage;
+    return outcome;
+  }
+
+  showEnemyGuard() {
+    this.flashCombatant('enemy', 0x83d6ff, false);
+    this.playEffect('guard', this.enemyFigure.x, this.enemyFigure.y, 100);
+    audio.play('defend');
+  }
+
+  applyTutorialEnemyHit(outcome) {
+    if (!outcome.playerDamage || this.enemyHp <= 0) return;
+    this.resolutionPhase = 'collision';
+    this.enemyHp = Math.max(0, this.enemyHp - outcome.playerDamage);
+    this.flashCombatant('enemy', 0xeb5b67, outcome.action === 'finisher');
+    this.playEffect('attack', this.enemyFigure.x, this.enemyFigure.y, outcome.action === 'finisher' ? 132 : 106, outcome.action === 'finisher');
+    this.showFloatingText(this.enemyFigure.x, this.enemyFigure.y - 58, `-${outcome.playerDamage}`, '#ffb1b8', outcome.action === 'finisher');
+  }
+
+  applyTutorialPlayerHit(outcome) {
+    if (!outcome.enemyDamage || this.playerHp <= 0 || this.enemyHp <= 0) return;
+    this.resolutionPhase = 'collision';
+    this.playerHp = Math.max(0, this.playerHp - outcome.enemyDamage);
+    const blocked = outcome.action === 'defend';
+    this.flashCombatant('player', blocked ? 0x83d6ff : 0xeb5b67, blocked);
+    this.showFloatingText(this.playerFigure.x, this.playerFigure.y - 58, `-${outcome.enemyDamage}`, blocked ? '#9fdcff' : '#ffb1b8', blocked);
+    if (outcome.causesDown) this.setPlayerPose('hurt', true);
+    audio.play(blocked ? 'defend' : 'hit');
+  }
+
+  finishTutorialTurn(outcome) {
+    this.resolutionPhase = 'complete';
+    if (this.enemyHp <= 0) { this.finish(true, `${outcome.line}\n고블린 정찰병을 쓰러뜨렸다!`); return; }
+    if (this.playerHp <= 0) { this.finish(false, `${outcome.line}\n수습 기사가 쓰러졌다…`); return; }
+    if (outcome.consumeRhythm) this.rhythm = 0;
+    if (outcome.rhythmGain) {
+      this.rhythm = Math.min(3, this.rhythm + outcome.rhythmGain);
+      this.playEffect('rhythm', 185, 432, outcome.rhythmGain === 2 ? 98 : 76, outcome.rhythmGain === 2);
+      this.showFloatingText(165, 440, `리듬 +${outcome.rhythmGain}`, '#ffd56a', outcome.rhythmGain === 2);
+      this.pulseRhythm(outcome.rhythmGain === 2);
+      audio.play('rhythm');
+    }
+    this.downTurns = outcome.causesDown ? 1 : outcome.startedDown ? 0 : 0;
+    this.turn += 1;
+    this.log = outcome.line;
+    if (!this.isDown()) this.setPlayerPose('idle', true);
+    this.inputLocked = false;
+    this.render();
+  }
+
+  resolveTutorialTurn(action, fromPointer) {
+    const outcome = this.tutorialOutcome(action);
+    const playerStrike = action === 'attack' || action === 'finisher';
+    const strikeDuration = action === 'finisher' ? 180 : 120;
+    const beginPlayerStrike = () => {
+      this.setPlayerPose('attack', true);
+      this.animateLunge('player', action === 'finisher');
+      audio.play(action === 'finisher' ? 'finisher' : 'attack');
+    };
+    const beginEnemyStrike = () => {
+      if (this.enemyHp <= 0) return;
+      this.animateLunge('enemy');
+      audio.play('enemyAttack');
+    };
+    const beginPlayerGuard = () => { this.setPlayerPose('guard', true); this.playEffect('guard', this.playerFigure.x, this.playerFigure.y, 106); audio.play('defend'); };
+    const beginFocus = () => { this.setPlayerPose('focus', true); audio.play('focus'); };
+    const finish = () => this.finishTutorialTurn(outcome);
+
+    if (!fromPointer) {
+      if (outcome.enemy.key === 'defend') this.showEnemyGuard();
+      if (action === 'defend') beginPlayerGuard();
+      else if (action === 'focus') beginFocus();
+      else beginPlayerStrike();
+      this.applyTutorialEnemyHit(outcome);
+      if (outcome.enemy.key === 'attack') beginEnemyStrike();
+      this.applyTutorialPlayerHit(outcome);
+      finish();
+      return;
+    }
+
+    this.inputLocked = true;
+    this.resolutionPhase = 'preparing';
+    this.updateActionInputs();
+    this.clearResolutionTimers();
+    if (outcome.enemy.key === 'defend') {
+      this.showEnemyGuard();
+      if (playerStrike) {
+        this.scheduleResolution(170, beginPlayerStrike);
+        this.scheduleResolution(170 + strikeDuration, () => this.applyTutorialEnemyHit(outcome));
+        this.scheduleResolution(470, finish);
+      } else if (action === 'defend') {
+        beginPlayerGuard();
+        this.scheduleResolution(130, this.showEnemyGuard.bind(this));
+        this.scheduleResolution(410, finish);
+      } else {
+        beginFocus();
+        this.scheduleResolution(190, this.showEnemyGuard.bind(this));
+        this.scheduleResolution(470, finish);
+      }
+      return;
+    }
+
+    if (action === 'defend') {
+      beginPlayerGuard();
+      this.scheduleResolution(210, beginEnemyStrike);
+      this.scheduleResolution(390, () => this.applyTutorialPlayerHit(outcome));
+      this.scheduleResolution(620, finish);
+    } else if (action === 'focus') {
+      beginFocus();
+      this.scheduleResolution(210, beginEnemyStrike);
+      this.scheduleResolution(390, () => this.applyTutorialPlayerHit(outcome));
+      this.scheduleResolution(650, finish);
+    } else {
+      beginPlayerStrike();
+      this.scheduleResolution(strikeDuration, () => this.applyTutorialEnemyHit(outcome));
+      this.scheduleResolution(330 + strikeDuration, beginEnemyStrike);
+      this.scheduleResolution(510 + strikeDuration, () => this.applyTutorialPlayerHit(outcome));
+      this.scheduleResolution(740 + strikeDuration, finish);
+    }
+  }
+
   takeTurn(action, fromPointer = false) {
     if (this.over || !['attack', 'defend', 'focus', 'finisher'].includes(action) || (action === 'finisher' && this.rhythm < 3)) return;
+    if (action === 'focus' && this.isDown()) return;
+    if (this.isTutorial()) {
+      this.resolveTutorialTurn(action, fromPointer);
+      return;
+    }
     if (fromPointer) this.lockActionInput(action === 'finisher' ? 500 : 410);
     // 이번 예고와 기존 노출을 고정한다. 단계/다음 노출은 양측 생존 확인 뒤 갱신한다.
     const enemy = this.currentIntent();
@@ -619,9 +821,13 @@ class BattleScene extends Phaser.Scene {
     const enemy = this.currentIntent();
     const intentColors = { attack: '#ff929b', heavy: '#ffad64', defend: '#8ec5ff', charge: '#d898ff' };
     const intentColor = intentColors[enemy.key] || '#ffd56a';
-    this.intentText.setText(this.over ? (this.enemyHp <= 0 ? '승리!' : '패배…') : `다음 행동 예고: ${enemy.name}`).setColor(intentColor); this.intentDetail.setText(this.over ? (this.enemyHp <= 0 ? '심장석의 봉인이 풀립니다.' : '다시 시작해 전투를 반복할 수 있습니다.') : enemy.detail);
-    this.intentPanel.setStrokeStyle(enemy.key === 'heavy' ? 5 : 3, Phaser.Display.Color.HexStringToColor(intentColor).color);
-    if (!this.over && this.lastIntentKey !== enemy.key) {
+    const tutorial = this.isTutorial();
+    const headline = this.over ? (this.enemyHp <= 0 ? '승리!' : '패배…') : tutorial ? '훈련: 움직임을 보고 대응하세요' : `다음 행동 예고: ${enemy.name}`;
+    const detail = this.over ? (this.enemyHp <= 0 ? '심장석의 봉인이 풀립니다.' : '다시 시작해 전투를 반복할 수 있습니다.') : tutorial ? '고블린은 공격과 방어 자세를 반복합니다.' : enemy.detail;
+    this.intentText.setText(headline).setColor(tutorial && !this.over ? '#ffd56a' : intentColor);
+    this.intentDetail.setText(detail);
+    this.intentPanel.setStrokeStyle(tutorial ? 3 : enemy.key === 'heavy' ? 5 : 3, tutorial ? this.colors.gold : Phaser.Display.Color.HexStringToColor(intentColor).color);
+    if (!tutorial && !this.over && this.lastIntentKey !== enemy.key) {
       this.lastIntentKey = enemy.key;
       this.animateIntent(enemy);
     }
@@ -633,6 +839,7 @@ class BattleScene extends Phaser.Scene {
     const finisher = this.buttons.finisher; finisher.bg.setFillStyle(finisher.color);
     this.sealText.setVisible(!!this.enemyConfig.boss && !this.over).setText(this.sealBroken ? '봉인 노출 · 이번 행동까지\n결정타 24 피해' : '봉인 닫힘 · 결정타 16 피해');
     if (this.sealRune) this.sealRune.setVisible(this.sealBroken && !this.over);
+    this.downText.setText(this.isDown() && !this.over ? '다운 · 이번 턴 집중 불가' : '').setVisible(this.isDown() && !this.over);
     this.logText.setText(this.log);
   }
 }
