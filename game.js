@@ -219,6 +219,7 @@ class BootScene extends Phaser.Scene {
     this.load.image('skeleton-shrine-keeper', 'assets/skeleton-shrine-keeper.png');
     this.load.image('seal-arbiter', 'assets/seal-arbiter.png');
     this.load.image('combat-effects', 'assets/combat-effects.png');
+    this.load.image('player-slash-effect', 'assets/player-slash-effect.png');
     this.load.image('novice-combat-sheet', 'assets/novice-combat-sheet.png');
     this.load.image('skeleton-combat-sheet', 'assets/skeleton-shrine-keeper-combat-sheet.png');
     this.load.image('goblin-combat-sheet', 'assets/goblin-combat-sheet.png');
@@ -250,6 +251,15 @@ class BootScene extends Phaser.Scene {
     effects.add('attack', 0, 0, 0, 724, 724);
     effects.add('guard', 0, 724, 0, 724, 724);
     effects.add('rhythm', 0, 1448, 0, 724, 724);
+
+    const playerSlash = this.textures.get('player-slash-effect');
+    for (let column = 0; column < 4; column++) playerSlash.add(`slash-${column}`, 0, column * 160, 0, 160, 160);
+    this.anims.create({
+      key: 'player-slash-forward',
+      frames: [0, 1, 2, 3].map(column => ({ key: 'player-slash-effect', frame: `slash-${column}` })),
+      frameRate: 18,
+      repeat: 0,
+    });
 
     const noviceCombat = this.textures.get('novice-combat-sheet');
     ['idle', 'attack', 'guard', 'focus', 'hurt', 'heavy', 'down'].forEach((row, rowIndex) => {
@@ -719,20 +729,17 @@ class BattleScene extends Phaser.Scene {
   }
 
   playPlayerSlashTrail(emphatic = false) {
-    // 내장 attack 시트의 검기는 프레임 가장자리에서 좌우로 튀어 보일 수 있어,
-    // 플레이어의 전방(오른쪽)에만 독립 검기를 두고 짧게 전진시킨다.
-    // 이펙트의 좌측 여백까지 플레이어 몸통을 넘지 않도록 전방 바깥에서 시작한다.
-    const startX = this.playerFigure.x + (emphatic ? 142 : 120);
-    const effect = pixelSprite(this, startX, this.playerFigure.y - 6, 'combat-effects', 'attack', emphatic ? 84 : 62)
-      .setOrigin(.5).setDepth(14).setTint(0xf8f1ff).setAlpha(.9);
-    const baseScale = effect.scaleX;
+    // 공격 시트는 물리 검만 담고, 청백색 4프레임 검기는 기사 전방에서 독립 재생한다.
+    // 적 위치의 기존 combat-effects/attack은 충돌 표식 역할만 유지한다.
+    const startX = this.playerFigure.x + (emphatic ? 138 : 112);
+    const effect = this.add.sprite(startX, this.playerFigure.y - 8, 'player-slash-effect', 'slash-0')
+      .setOrigin(.5).setDepth(14).setScale((emphatic ? 82 : 70) / 160).setAlpha(.94)
+      .play('player-slash-forward');
     this.tweens.add({
       targets: effect,
-      x: startX + (emphatic ? 42 : 32),
+      x: startX + (emphatic ? 46 : 38),
       alpha: 0,
-      scaleX: baseScale * 1.18,
-      scaleY: baseScale * 1.18,
-      duration: emphatic ? 260 : 210,
+      duration: emphatic ? 270 : 225,
       ease: 'Quad.Out',
       onComplete: () => effect.destroy(),
     });
