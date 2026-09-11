@@ -357,15 +357,15 @@ class BattleScene extends Phaser.Scene {
 
   setPlayerPose(pose, hold = false) {
     if (!this.playerFigure?.active) return;
-    // 전투 시트는 왼쪽 원본 방향이다. 어떤 행동 프레임으로 바뀌어도
-    // 좌측 기사는 항상 오른쪽의 적을 바라보게 고정한다.
-    this.playerFigure.setFlipX(true);
+    // 수습 기사 전투 시트 원본은 오른쪽을 향한다. 모든 포즈 전환 뒤에도
+    // 좌측 기사는 원본 방향 그대로 오른쪽의 적을 바라본다.
+    this.playerFigure.setFlipX(false);
     if (pose === 'down') this.startDownMotion();
     else this.stopDownMotion();
-    this.playerFigure.play(`novice-${pose}`, true);
+    this.playerFigure.play(`novice-${pose}`, true).setFlipX(false);
     if (!hold && pose !== 'idle') {
       this.playerFigure.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
-        if (!this.over && !this.isDown()) this.playerFigure.play('novice-idle', true);
+        if (!this.over && !this.isDown()) this.playerFigure.play('novice-idle', true).setFlipX(false);
       });
     }
   }
@@ -438,8 +438,8 @@ class BattleScene extends Phaser.Scene {
     this.playerHpText = this.text(38, 315, '', 12); this.enemyHpText = this.text(650, 315, '', 12);
     this.playerBar = this.add.rectangle(138, 345, 200, 16, this.colors.hp).setStrokeStyle(2, 0xf8f1ff); this.enemyBar = this.add.rectangle(750, 345, 200, 16, this.colors.green).setStrokeStyle(2, 0xf8f1ff);
     this.hpBarTweens = { player: null, enemy: null };
-    // 전투 시트 원본은 왼쪽을 향한다. 좌측의 기사는 뒤집어 오른쪽 적을 향한다.
-    this.playerFigure = this.add.sprite(145, 225, 'novice-combat-sheet', 'idle-0').setScale(164 / 280).setFlipX(true).play('novice-idle');
+    // 전투 시트 원본은 오른쪽을 향한다. 좌측의 기사는 뒤집지 않고 오른쪽 적을 향한다.
+    this.playerFigure = this.add.sprite(145, 225, 'novice-combat-sheet', 'idle-0').setScale(164 / 280).setFlipX(false).play('novice-idle').setFlipX(false);
     this.enemyFigure = null;
     this.sealText = this.text(750, 359, '', 11, '#ffd56a', 'center');
     this.phaseText = this.text(450, 170, '', 12, '#ffd56a', 'center');
