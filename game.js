@@ -875,6 +875,9 @@ class BattleScene extends Phaser.Scene {
     this.setHealth('player', this.playerHp - outcome.enemyDamage);
     const blocked = outcome.action === 'defend';
     if (blocked) {
+      // 방어 선택 때는 자세나 파형을 미리 보이지 않는다. 적의 타격이 닿는 순간에만
+      // 가드 자세·실제 가드 효과·패링 반동을 함께 시작해 대응이 읽히게 한다.
+      this.setPlayerPose('guard', true);
       this.showGuard('player', true);
       this.animateGuardParry('player');
     }
@@ -884,7 +887,7 @@ class BattleScene extends Phaser.Scene {
     }
     this.showFloatingText(this.playerFigure.x, this.playerFigure.y - 58, `-${outcome.enemyDamage}`, blocked ? '#9fdcff' : '#ffb1b8', blocked);
     if (outcome.causesDown) this.setPlayerPose('down', true);
-    audio.play(blocked ? 'defend' : 'hit');
+    if (!blocked) audio.play('hit');
   }
 
   finishTutorialTurn(outcome, fromPointer = false) {
@@ -956,13 +959,16 @@ class BattleScene extends Phaser.Scene {
       this.tweens.add({ targets: this.enemyFigure, scaleX: baseScale * 1.1, scaleY: baseScale * 1.1, duration: 150, yoyo: true, ease: 'Sine.InOut' });
       audio.play('charge');
     };
-    const beginPlayerGuard = () => { this.setPlayerPose('guard', true); this.showGuard('player'); };
+    const showPlayerGuardSelection = () => {
+      // 선택 확인은 짧은 텍스트만 사용한다. 실제 방패 자세·파형은 적 타격 충돌 시점에 시작한다.
+      this.showFloatingText(this.playerFigure.x, this.playerFigure.y - 76, '방어 준비', '#8ec5ff');
+    };
     const beginFocus = () => { this.setPlayerPose('focus', true); audio.play('focus'); };
     const finish = () => this.finishTutorialTurn(outcome, fromPointer);
 
     if (!fromPointer) {
       if (outcome.enemy.key === 'defend') this.showEnemyGuard();
-      if (action === 'defend') beginPlayerGuard();
+      if (action === 'defend') showPlayerGuardSelection();
       else if (action === 'focus') beginFocus();
       else beginPlayerStrike();
       this.applyTutorialEnemyHit(outcome, false);
@@ -984,7 +990,7 @@ class BattleScene extends Phaser.Scene {
         this.scheduleResolution(360 + strikeDuration, () => this.applyTutorialEnemyHit(outcome, true));
         this.scheduleResolution(action === 'finisher' ? 1380 : 1280, finish);
       } else if (action === 'defend') {
-        beginPlayerGuard();
+        showPlayerGuardSelection();
         this.scheduleResolution(980, finish);
       } else {
         beginFocus();
@@ -1000,7 +1006,7 @@ class BattleScene extends Phaser.Scene {
         this.scheduleResolution(strikeDuration, () => this.applyTutorialEnemyHit(outcome, true));
         this.scheduleResolution(760 + strikeDuration, finish);
       } else {
-        if (action === 'defend') beginPlayerGuard(); else beginFocus();
+        if (action === 'defend') showPlayerGuardSelection(); else beginFocus();
         this.scheduleResolution(360, beginEnemyCharge);
         this.scheduleResolution(1050, finish);
       }
@@ -1008,7 +1014,7 @@ class BattleScene extends Phaser.Scene {
     }
 
     if (action === 'defend') {
-      beginPlayerGuard();
+      showPlayerGuardSelection();
       this.scheduleResolution(440, beginEnemyStrike);
       this.scheduleResolution(enemyIsHeavy ? 960 : 780, () => this.applyTutorialPlayerHit(outcome));
       this.scheduleResolution(enemyIsHeavy ? 1560 : 1280, finish);
