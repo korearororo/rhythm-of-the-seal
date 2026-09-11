@@ -219,7 +219,6 @@ class BootScene extends Phaser.Scene {
     this.load.image('skeleton-shrine-keeper', 'assets/skeleton-shrine-keeper.png');
     this.load.image('seal-arbiter', 'assets/seal-arbiter.png');
     this.load.image('combat-effects', 'assets/combat-effects.png');
-    this.load.image('player-slash-effect', 'assets/player-slash-effect.png');
     this.load.image('novice-combat-sheet', 'assets/novice-combat-sheet.png');
     this.load.image('skeleton-combat-sheet', 'assets/skeleton-shrine-keeper-combat-sheet.png');
     this.load.image('goblin-combat-sheet', 'assets/goblin-combat-sheet.png');
@@ -251,15 +250,6 @@ class BootScene extends Phaser.Scene {
     effects.add('attack', 0, 0, 0, 724, 724);
     effects.add('guard', 0, 724, 0, 724, 724);
     effects.add('rhythm', 0, 1448, 0, 724, 724);
-
-    const playerSlash = this.textures.get('player-slash-effect');
-    for (let column = 0; column < 4; column++) playerSlash.add(`slash-${column}`, 0, column * 160, 0, 160, 160);
-    this.anims.create({
-      key: 'player-slash-forward',
-      frames: [0, 1, 2, 3].map(column => ({ key: 'player-slash-effect', frame: `slash-${column}` })),
-      frameRate: 18,
-      repeat: 0,
-    });
 
     const noviceCombat = this.textures.get('novice-combat-sheet');
     ['idle', 'attack', 'guard', 'focus', 'hurt', 'heavy', 'down'].forEach((row, rowIndex) => {
@@ -728,49 +718,6 @@ class BattleScene extends Phaser.Scene {
     this.enemyDownRestingY = null;
   }
 
-  playPlayerSlashTrail(emphatic = false) {
-    // 공격 시트의 검 끝(attack-0~3)을 기준으로, 검기가 검날에서 출발해 전방으로
-    // 이어지게 한다. 각 프레임의 검 끝은 서로 크게 달라 단일 고정 시작점이면 공중에 뜬다.
-    const frames = [
-      // tipX/Y는 280px attack 셀의 실제 검 끝 알파 픽셀이다.
-      { delay: 0,   tipX: 207, tipY: 252, left: 41, scale: .54, angle: 18, progress: 0,  alpha: .82 },
-      { delay: 84,  tipX: 243, tipY: 169, left: 20, scale: .86, angle: -4, progress: 28, alpha: 1 },
-      { delay: 168, tipX: 236, tipY: 232, left: 25, scale: .92, angle: 16, progress: 60, alpha: .96 },
-      { delay: 252, tipX: 208, tipY: 250, left: 52, scale: .58, angle: 22, progress: 88, alpha: .68 },
-    ];
-    let effect = null;
-    const showFrame = index => {
-      if (!this.playerFigure?.active) return;
-      const frame = frames[index];
-      // attack 셀 좌표를 스프라이트 원점·표시 스케일·반전까지 포함한 월드 좌표로 바꾼다.
-      // 플레이어는 현재 우향이지만, 후속 방향 전환에서도 같은 앵커 식을 유지한다.
-      const player = this.playerFigure;
-      const scaleX = Math.abs(player.scaleX) * (player.flipX ? -1 : 1);
-      const scaleY = Math.abs(player.scaleY) * (player.flipY ? -1 : 1);
-      const tipWorldX = player.x + (frame.tipX - player.displayOriginX) * scaleX;
-      const tipWorldY = player.y + (frame.tipY - player.displayOriginY) * scaleY;
-      const angle = player.flipX ? 180 - frame.angle : frame.angle;
-      const distance = frame.progress * Math.abs(player.scaleX);
-      const radians = Phaser.Math.DegToRad(angle);
-      const centerX = tipWorldX + Math.cos(radians) * distance;
-      const centerY = tipWorldY + Math.sin(radians) * distance;
-      if (!effect) {
-        effect = this.add.sprite(centerX, centerY, 'player-slash-effect', 'slash-0').setDepth(14);
-        // 수동 프레임 앵커를 쓰되, 검격 전용 애니메이션 식별자는 유지한다.
-        effect.play('player-slash-forward');
-        effect.anims.pause();
-      }
-      // slash의 알파 바운드 좌단(left, 80)을 원점으로 써서 보이는 첫 픽셀이 검 끝에 닿는다.
-      effect.setFrame(`slash-${index}`).setOrigin(frame.left / 160, .5).setPosition(centerX, centerY).setScale(frame.scale).setAngle(angle).setAlpha(frame.alpha);
-    };
-    showFrame(0);
-    frames.slice(1).forEach((frame, index) => this.scheduleResolution(frame.delay, () => showFrame(index + 1)));
-    this.scheduleResolution(330, () => {
-      if (effect?.active) effect.destroy();
-      effect = null;
-    });
-  }
-
   collapseEnemyCharge() {
     if (!this.enemyFigure?.active) return;
     const figure = this.enemyFigure;
@@ -992,7 +939,6 @@ class BattleScene extends Phaser.Scene {
     const beginPlayerStrike = () => {
       this.setPlayerPose(action === 'finisher' ? 'heavy' : 'attack', true);
       this.animateLunge('player', action === 'finisher');
-      if (action === 'attack') this.playPlayerSlashTrail();
       if (action === 'finisher') this.cameras.main.shake(110, .004);
       audio.play(action === 'finisher' ? 'finisher' : 'attack');
     };
