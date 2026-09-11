@@ -729,19 +729,35 @@ class BattleScene extends Phaser.Scene {
   }
 
   playPlayerSlashTrail(emphatic = false) {
-    // 공격 시트는 물리 검만 담고, 청백색 4프레임 검기는 기사 전방에서 독립 재생한다.
-    // 적 위치의 기존 combat-effects/attack은 충돌 표식 역할만 유지한다.
-    const startX = this.playerFigure.x + (emphatic ? 138 : 112);
-    const effect = this.add.sprite(startX, this.playerFigure.y - 8, 'player-slash-effect', 'slash-0')
-      .setOrigin(.5).setDepth(14).setScale((emphatic ? 82 : 70) / 160).setAlpha(.94)
-      .play('player-slash-forward');
-    this.tweens.add({
-      targets: effect,
-      x: startX + (emphatic ? 46 : 38),
-      alpha: 0,
-      duration: emphatic ? 270 : 225,
-      ease: 'Quad.Out',
-      onComplete: () => effect.destroy(),
+    // 공격 시트의 검 끝(attack-0~3)을 기준으로, 검기가 검날에서 출발해 전방으로
+    // 이어지게 한다. 각 프레임의 검 끝은 서로 크게 달라 단일 고정 시작점이면 공중에 뜬다.
+    const frames = [
+      { delay: 0,   tipX: 40, tipY: 70, left: 41, scale: .54, angle: 18, progress: 0,  alpha: .82 },
+      { delay: 84,  tipX: 63, tipY: 70, left: 20, scale: .86, angle: -4, progress: 16, alpha: 1 },
+      { delay: 168, tipX: 59, tipY: 70, left: 25, scale: .92, angle: 16, progress: 38, alpha: .96 },
+      { delay: 252, tipX: 43, tipY: 70, left: 52, scale: .58, angle: 22, progress: 62, alpha: .68 },
+    ];
+    let effect = null;
+    const showFrame = index => {
+      if (!this.playerFigure?.active) return;
+      const frame = frames[index];
+      // slash 셀의 left는 투명 여백의 끝이다. 그 픽셀이 물리 검 끝에서 시작하도록
+      // 중심점을 보정한 뒤, 후속 프레임만 적 쪽 진행 거리(progress)를 더한다.
+      const centerX = this.playerFigure.x + frame.tipX + (80 - frame.left) * frame.scale + frame.progress;
+      const centerY = this.playerFigure.y + frame.tipY;
+      if (!effect) {
+        effect = this.add.sprite(centerX, centerY, 'player-slash-effect', 'slash-0').setOrigin(.5).setDepth(14);
+        // 수동 프레임 앵커를 쓰되, 검격 전용 애니메이션 식별자는 유지한다.
+        effect.play('player-slash-forward');
+        effect.anims.pause();
+      }
+      effect.setFrame(`slash-${index}`).setPosition(centerX, centerY).setScale(frame.scale).setAngle(frame.angle).setAlpha(frame.alpha);
+    };
+    showFrame(0);
+    frames.slice(1).forEach((frame, index) => this.scheduleResolution(frame.delay, () => showFrame(index + 1)));
+    this.scheduleResolution(330, () => {
+      if (effect?.active) effect.destroy();
+      effect = null;
     });
   }
 
