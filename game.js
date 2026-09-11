@@ -721,7 +721,8 @@ class BattleScene extends Phaser.Scene {
   playPlayerSlashTrail(emphatic = false) {
     // 내장 attack 시트의 검기는 프레임 가장자리에서 좌우로 튀어 보일 수 있어,
     // 플레이어의 전방(오른쪽)에만 독립 검기를 두고 짧게 전진시킨다.
-    const startX = this.playerFigure.x + (emphatic ? 82 : 70);
+    // 이펙트의 좌측 여백까지 플레이어 몸통을 넘지 않도록 전방 바깥에서 시작한다.
+    const startX = this.playerFigure.x + (emphatic ? 142 : 120);
     const effect = pixelSprite(this, startX, this.playerFigure.y - 6, 'combat-effects', 'attack', emphatic ? 84 : 62)
       .setOrigin(.5).setDepth(14).setTint(0xf8f1ff).setAlpha(.9);
     const baseScale = effect.scaleX;
