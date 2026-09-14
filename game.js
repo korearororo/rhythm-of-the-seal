@@ -298,7 +298,14 @@ class BootScene extends Phaser.Scene {
         repeat: row === 'idle' || row === 'down' ? -1 : 0,
       });
     });
-    this.scene.start('intro');
+    // 시각 QA 전용 바로가기: 전투 규칙을 건드리지 않고 정상 보스 초기 상태로만 진입한다.
+    const qaBoss = new URLSearchParams(window.location.search).get('qa') === 'boss';
+    if (qaBoss) {
+      this.registry.set('battleOrder', ENEMY_ORDER);
+      this.registry.set('battleIndex', ENEMY_ORDER.indexOf('arbiter'));
+      this.registry.set('carriedPlayerHp', null);
+      this.scene.start('battle');
+    } else this.scene.start('intro');
   }
 }
 
