@@ -142,7 +142,8 @@ const ENEMY_PRESETS = {
     displayName: '봉인 심판관',
     logName: '봉인 심판관',
     maxHp: 64,
-    sprite: { texture: 'seal-arbiter', frame: 'idle', x: 748, y: 183, scale: 210, flipX: false },
+    sprite: { texture: 'seal-arbiter-combat-sheet', frame: 'idle-0', x: 748, y: 254, scale: 210, flipX: false },
+    combatSheet: true, combatAnimKey: 'arbiter',
     // 보스는 intentSequence 순환을 쓰지 않는다. 묶음은 BattleScene이 HP·플레이어 리듬에서 선택한다.
     intentSequence: ['defend', 'attack', 'charge'],
     encounterLabel: '심장석의 마지막 수호자 · 봉인 심판관',
@@ -212,6 +213,8 @@ class BootScene extends Phaser.Scene {
     this.load.image('characters', 'assets/characters.png');
     this.load.image('skeleton-shrine-keeper', 'assets/skeleton-shrine-keeper.png');
     this.load.image('seal-arbiter', 'assets/seal-arbiter.png');
+    this.load.image('seal-arbiter-combat-sheet', 'assets/seal-arbiter-combat-sheet.png');
+    this.load.image('seal-arbiter-arena', 'assets/seal-arbiter-arena.png');
     this.load.image('combat-effects', 'assets/combat-effects.png');
     this.load.image('novice-combat-sheet', 'assets/novice-combat-sheet.png');
     this.load.image('skeleton-combat-sheet', 'assets/skeleton-shrine-keeper-combat-sheet.png');
@@ -283,6 +286,16 @@ class BootScene extends Phaser.Scene {
           frameRate: row === 'down' ? 3 : (row === 'attack' || row === 'hurt' || row === 'heavy' ? 12 : 9),
           repeat: row === 'idle' || row === 'down' ? -1 : 0,
         });
+      });
+    });
+    const arbiterCombat = this.textures.get('seal-arbiter-combat-sheet');
+    ['idle', 'attack', 'guard', 'charge', 'heavy', 'hurt', 'down'].forEach((row, rowIndex) => {
+      for (let column = 0; column < 4; column++) arbiterCombat.add(`${row}-${column}`, 0, column * 280, rowIndex * 280, 280, 280);
+      this.anims.create({
+        key: `arbiter-${row}`,
+        frames: (row === 'down' ? [0, 1, 2, 3, 2, 1] : [0, 1, 2, 3]).map(column => ({ key: 'seal-arbiter-combat-sheet', frame: `${row}-${column}` })),
+        frameRate: row === 'down' ? 3 : (row === 'attack' || row === 'hurt' || row === 'heavy' ? 12 : 9),
+        repeat: row === 'idle' || row === 'down' ? -1 : 0,
       });
     });
     this.scene.start('intro');
@@ -418,10 +431,14 @@ class BattleScene extends Phaser.Scene {
 
   buildBackground() {
     this.cameras.main.setBackgroundColor('#171024');
-    this.add.rectangle(WIDTH / 2, 374, WIDTH, 235, 0x21172e);
-    pixelSprite(this, WIDTH / 2, 228, 'shrine-kit', 'arch', 390, .25);
-    pixelSprite(this, WIDTH / 2, 414, 'shrine-kit', 'floor-strip', 180, .55);
-    pixelSprite(this, WIDTH / 2, 304, 'shrine-kit', 'rune', 132, .34);
+    if (this.enemyConfig.boss) {
+      this.add.image(WIDTH / 2, HEIGHT / 2, 'seal-arbiter-arena').setDisplaySize(WIDTH, HEIGHT);
+    } else {
+      this.add.rectangle(WIDTH / 2, 374, WIDTH, 235, 0x21172e);
+      pixelSprite(this, WIDTH / 2, 228, 'shrine-kit', 'arch', 390, .25);
+      pixelSprite(this, WIDTH / 2, 414, 'shrine-kit', 'floor-strip', 180, .55);
+      pixelSprite(this, WIDTH / 2, 304, 'shrine-kit', 'rune', 132, .34);
+    }
     this.text(WIDTH / 2, 22, this.enemyConfig.encounterLabel, 18, '#ffd56a', 'center');
   }
 
