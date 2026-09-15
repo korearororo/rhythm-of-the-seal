@@ -85,7 +85,7 @@ function prepareCombatArt(scene) {
 
 function combatFrames(key, row) {
   const resting = key.startsWith('kobold') ? [1, 2, 3, 2] : [0, 1, 3, 1];
-  const restrainedHurt = row === 'hurt' && key.startsWith('goblin');
+  const restrainedHurt = row === 'hurt' && ['goblin', 'kobold', 'orc'].some(prefix => key.startsWith(prefix));
   const order = row === 'down' ? resting : row === 'guard' ? [0, 1] : restrainedHurt ? [0, 2, 3] : [0, 1, 2, 3];
   const holds = row === 'heavy' ? [200, 260, 100, 100] : row === 'attack' ? [100, 160, 120, 80] : row === 'hurt' ? [40, 150, 100, 40] : [];
   return order.map(col => ({ key, frame: `${row}-${col}`, duration: holds[col] || 0 }));

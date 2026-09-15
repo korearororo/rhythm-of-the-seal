@@ -170,6 +170,18 @@ function pixelSprite(scene, x, y, texture, frame, height, alpha = 1) {
   return sprite.setScale(height / sprite.height);
 }
 
+// 입구와 엔딩의 바닥은 끊어진 소품 목록 대신 하나의 석조 단으로 연결한다.
+function shrineLanding(scene, top) {
+  const stone = scene.add.graphics();
+  stone.fillStyle(0x292038).fillRect(80, top, 740, 96);
+  stone.fillStyle(0x443049).fillRect(80, top, 740, 4);
+  stone.fillStyle(0x151121).fillRect(80, top + 92, 740, 4);
+  stone.fillStyle(0x1c1629).fillRect(80, top + 42, 740, 2);
+  for (const x of [200, 360, 540, 700]) stone.fillRect(x, top + 4, 2, 38);
+  for (const x of [130, 280, 450, 620, 770]) stone.fillRect(x, top + 44, 2, 48);
+  return stone;
+}
+
 function validateEnemyPresets() {
   const issues = [];
   if (!Array.isArray(ENEMY_ORDER) || ENEMY_ORDER.length === 0) {
@@ -348,7 +360,7 @@ class IntroScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#171024');
     this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x171024);
     pixelSprite(this, WIDTH / 2, 287, 'shrine-kit', 'arch', 450, .46);
-    pixelSprite(this, WIDTH / 2, 520, 'shrine-kit', 'floor-strip', 155, .72);
+    shrineLanding(this, 462);
     this.add.sprite(196, 404, 'novice-combat-sheet', 'idle-0').setScale(164 / 280).play('novice-idle');
     pixelSprite(this, 704, 400, 'shrine-kit', 'rune', 108, .8);
     this.add.text(WIDTH / 2, 82, '봉인의 박자', { fontFamily: UI_FONT, fontSize: '36px', fontStyle: 'bold', color: '#ffd56a' }).setOrigin(.5);
@@ -1433,8 +1445,8 @@ class EndingScene extends Phaser.Scene {
   create() {
     this.cameras.main.setBackgroundColor('#171024');
     this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x171024);
-    pixelSprite(this, WIDTH / 2, 242, 'shrine-kit', 'arch', 420, .34);
-    pixelSprite(this, WIDTH / 2, 480, 'shrine-kit', 'floor-strip', 145, .65);
+    pixelSprite(this, WIDTH / 2, 282, 'shrine-kit', 'arch', 420, .34);
+    shrineLanding(this, 464);
     pixelSprite(this, 450, 184, 'shrine-kit', 'rune', 172, .9);
     this.add.sprite(245, 410, 'novice-combat-sheet', 'idle-0').setScale(164 / 280).play('novice-idle');
     this.add.text(WIDTH / 2, 106, '심장석 복구 완료', { fontFamily: UI_FONT, fontSize: '20px', fontStyle: 'bold', color: '#ffd56a' }).setOrigin(.5);
@@ -1467,12 +1479,12 @@ class BattleTransitionScene extends Phaser.Scene {
 
     this.cameras.main.setBackgroundColor('#171024');
     this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x171024);
-    this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, 292, 0x2a1d3b).setStrokeStyle(3, 0x9d7bbf);
+    this.add.rectangle(WIDTH / 2, 314, 740, 300, 0x2a1d3b).setStrokeStyle(1, 0x776344);
     const defeatedName = (currentEnemy && currentEnemy.displayName) || '적';
     const nextEnemyName = (nextEnemy && nextEnemy.displayName) || '다음 적';
     const flow = DUNGEON_FLOW[nextEnemy?.id] || { zone: '성소 깊은 곳', threat: `${nextEnemyName}가 길을 막는다.` };
     this.add.text(WIDTH / 2, 110, flow.zone, { fontFamily: UI_FONT, fontSize: '24px', fontStyle: 'bold', color: '#ffd56a' }).setOrigin(.5);
-    this.add.text(WIDTH / 2, 156, `${defeatedName}을 쓰러뜨렸다.`, { fontFamily: UI_FONT, fontSize: '17px', color: '#c6b6d8' }).setOrigin(.5);
+    this.add.text(WIDTH / 2, 143, `${defeatedName} 처치`, { fontFamily: UI_FONT, fontSize: '17px', color: '#c6b6d8' }).setOrigin(.5);
     this.add.text(WIDTH / 2, 194, nextEnemyName, { fontFamily: UI_FONT, fontSize: '20px', fontStyle: 'bold', color: '#f8f1ff' }).setOrigin(.5);
     const carriedPlayerHp = this.registry.get('carriedPlayerHp');
     const preparation = typeof carriedPlayerHp === 'number'
