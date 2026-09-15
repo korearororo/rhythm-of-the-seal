@@ -102,7 +102,7 @@ const ENEMY_PRESETS = {
     logName: '고블린 정찰병',
     maxHp: 40,
     // 원본 고블린은 왼쪽을 향한다. 오른쪽에 배치하므로 뒤집지 않아야 기사와 마주 본다.
-    sprite: { texture: 'goblin-combat-sheet', frame: 'idle-0', x: 755, y: 286, scale: 164, flipX: false },
+    sprite: { texture: 'goblin-combat-sheet', frame: 'idle-0', x: 520, y: 286, scale: 164, flipX: false },
     combatSheet: true, combatAnimKey: 'goblin',
     // 튜토리얼은 화면에 순서를 노출하지 않는 공격→방어 고정 반복이다.
     intentSequence: ['attack', 'defend'],
@@ -113,7 +113,7 @@ const ENEMY_PRESETS = {
     displayName: '해골 성소지기',
     logName: '해골 성소지기',
     maxHp: 48,
-    sprite: { texture: 'skeleton-combat-sheet', frame: 'idle-0', x: 760, y: 286, scale: 164, flipX: false },
+    sprite: { texture: 'skeleton-combat-sheet', frame: 'idle-0', x: 520, y: 286, scale: 164, flipX: false },
     combatSheet: true, combatAnimKey: 'skeleton',
     intentSequence: ['attack', 'attack', 'defend'],
     encounterLabel: '해골 성소지기와 조우했다',
@@ -123,7 +123,7 @@ const ENEMY_PRESETS = {
     displayName: '코볼트 주술사',
     logName: '코볼트 주술사',
     maxHp: 52,
-    sprite: { texture: 'kobold-shaman-combat-sheet', frame: 'idle-0', x: 758, y: 286, scale: 164, flipX: false },
+    sprite: { texture: 'kobold-shaman-combat-sheet', frame: 'idle-0', x: 520, y: 286, scale: 164, flipX: false },
     combatSheet: true, combatAnimKey: 'kobold',
     // 세 번째 성공한 힘 모으기 뒤의 공격 칸만 강공격으로 바뀐다.
     intentSequence: ['defend', 'charge', 'attack'],
@@ -134,7 +134,7 @@ const ENEMY_PRESETS = {
     displayName: '오크 파수꾼',
     logName: '오크 파수꾼',
     maxHp: 56,
-    sprite: { texture: 'orc-sentinel-combat-sheet', frame: 'idle-0', x: 758, y: 286, scale: 178, flipX: false },
+    sprite: { texture: 'orc-sentinel-combat-sheet', frame: 'idle-0', x: 520, y: 286, scale: 178, flipX: false },
     combatSheet: true, combatAnimKey: 'orc',
     // 공격 칸은 적 리듬이 3일 때만 강공격으로 바뀐다.
     intentSequence: ['attack', 'defend', 'attack', 'charge'],
@@ -145,7 +145,7 @@ const ENEMY_PRESETS = {
     displayName: '봉인 심판관',
     logName: '봉인 심판관',
     maxHp: 64,
-    sprite: { texture: 'seal-arbiter-combat-sheet', frame: 'idle-0', x: 748, y: 286, scale: 210, flipX: false },
+    sprite: { texture: 'seal-arbiter-combat-sheet', frame: 'idle-0', x: 520, y: 286, scale: 210, flipX: false },
     combatSheet: true, combatAnimKey: 'arbiter',
     // 보스는 intentSequence 순환을 쓰지 않는다. 묶음은 BattleScene이 HP·플레이어 리듬에서 선택한다.
     intentSequence: ['defend', 'attack', 'charge'],
@@ -407,6 +407,11 @@ class BattleScene extends Phaser.Scene {
     }
   }
 
+  update() {
+    if (this.playerFigure?.active) this.playerShadow?.setX(this.playerFigure.x);
+    if (this.enemyFigure?.active) this.enemyShadow?.setX(this.enemyFigure.x);
+  }
+
   text(x, y, value, size = 14, color = '#f8f1ff', align = 'left') {
     return this.add.text(x, y, value, { fontFamily: UI_FONT, fontSize: `${size}px`, fontStyle: 'bold', color, align, lineSpacing: 6 }).setOrigin(align === 'center' ? .5 : 0, 0);
   }
@@ -530,10 +535,10 @@ class BattleScene extends Phaser.Scene {
     this.playerHpText = this.text(38, 315, '', 12); this.enemyHpText = this.text(650, 315, '', 12);
     this.playerBar = this.add.rectangle(138, 345, 200, 16, this.colors.hp).setStrokeStyle(2, 0xf8f1ff); this.enemyBar = this.add.rectangle(750, 345, 200, 16, this.colors.green).setStrokeStyle(2, 0xf8f1ff);
     this.hpBarTweens = { player: null, enemy: null };
-    this.add.ellipse(145, 286, 76, 12, 0x050409, .6);
-    this.add.ellipse(this.enemyConfig.sprite.x, 286, 88, 12, 0x050409, .6);
+    this.playerShadow = this.add.ellipse(380, 286, 76, 12, 0x050409, .6);
+    this.enemyShadow = this.add.ellipse(520, 286, 88, 12, 0x050409, .6);
     // 전투 시트 원본은 오른쪽을 향한다. 좌측의 기사는 뒤집지 않고 오른쪽 적을 향한다.
-    this.playerFigure = this.add.sprite(145, 225, 'novice-combat-sheet', 'idle-0').setScale(164 / 280).setFlipX(false).play('novice-idle').setFlipX(false);
+    this.playerFigure = this.add.sprite(380, 225, 'novice-combat-sheet', 'idle-0').setScale(164 / 280).setFlipX(false).play('novice-idle').setFlipX(false);
     this.enemyFigure = null;
     this.sealText = this.text(750, 359, '', 11, '#ffd56a', 'center');
     this.phaseText = this.text(450, 170, '', 12, '#ffd56a', 'center');
@@ -587,6 +592,8 @@ class BattleScene extends Phaser.Scene {
   }
 
   resetBattle() {
+    this.cancelStrikeMotion('player');
+    this.cancelStrikeMotion('enemy');
     audio.stopAll();
     this.clearVictoryTransition();
     if (this.actionUnlockTimer) this.actionUnlockTimer.remove(false);
@@ -620,7 +627,7 @@ class BattleScene extends Phaser.Scene {
     if (enemy.boss) this.selectBossBundle();
     this.phaseText.setText('');
     if (this.sealRune) this.sealRune.destroy();
-    this.sealRune = enemy.boss ? pixelSprite(this, 748, 200, 'shrine-kit', 'rune', 120, .5).setVisible(false) : null;
+    this.sealRune = enemy.boss ? pixelSprite(this, 520, 200, 'shrine-kit', 'rune', 120, .5).setVisible(false) : null;
     this.restartButton.container.setVisible(false); Object.entries(this.buttons).forEach(([key, b]) => { if (key !== 'restart') b.container.setVisible(true); });
     this.setPlayerPose('idle', true);
     this.log = this.isTutorial() ? '고블린은 공격 → 방어를 반복한다. 첫 공격에 대비하자.' : '적의 동작을 기억하고 빈틈을 찾자.'; this.render(true);
@@ -753,12 +760,30 @@ class BattleScene extends Phaser.Scene {
     delete this.strikeMotions[side];
   }
 
+  weaponFrontOffset(figure, frameName, rightFacing) {
+    const cacheKey = `${figure.texture.key}/${frameName}/${rightFacing}`;
+    this.weaponFrontCache ||= new Map();
+    let front = this.weaponFrontCache.get(cacheKey);
+    if (front === undefined) {
+      const frame = figure.texture.get(frameName);
+      const source = figure.texture.getSourceImage();
+      const pixels = source.getContext('2d').getImageData(frame.cutX, frame.cutY, 280, 280).data;
+      front = rightFacing ? 0 : 279;
+      for (let y = 8; y < 272; y++) for (let x = 8; x < 272; x++) {
+        if (pixels[(y * 280 + x) * 4 + 3] < 192) continue;
+        front = rightFacing ? Math.max(front, x) : Math.min(front, x);
+      }
+      this.weaponFrontCache.set(cacheKey, front);
+    }
+    return (front - figure.displayOriginX) * figure.scaleX;
+  }
+
   strikeImpact(side) {
     const motion = this.strikeMotions?.[side];
     if (!motion || motion.hit) return;
     motion.hit = true;
     motion.tween?.stop();
-    motion.figure.setX(motion.homeX + (side === 'player' ? 1 : -1) * (motion.heavy ? 40 : 28));
+    motion.figure.setX(motion.targetX);
     motion.figure.setFrame(`${motion.pose}-${motion.contact}`);
     motion.phase = 'impact';
     const hold = motion.heavy ? 180 : 120;
@@ -780,7 +805,11 @@ class BattleScene extends Phaser.Scene {
     const sign = side === 'player' ? 1 : -1;
     const pose = emphatic ? 'heavy' : 'attack';
     const contact = emphatic || (side === 'enemy' && ['orc', 'kobold'].includes(this.enemyConfig.id)) ? 2 : 1;
-    const motion = { figure, pose, contact, heavy: emphatic, homeX: figure.x, timers: [], phase: 'anticipation', hit: false };
+    const defender = side === 'player' ? this.enemyFigure : this.playerFigure;
+    const contactX = defender.x - sign * 10;
+    const tipOffset = this.weaponFrontOffset(figure, `${pose}-${contact}`, side === 'player');
+    const targetX = contactX - tipOffset;
+    const motion = { figure, pose, contact, targetX, contactX, tipOffset, heavy: emphatic, homeX: figure.x, timers: [], phase: 'anticipation', hit: false };
     (this.strikeMotions ||= {})[side] = motion;
     figure.anims.pause();
     figure.setFrame(`${pose}-0`);
@@ -789,7 +818,7 @@ class BattleScene extends Phaser.Scene {
       if (!figure.active) return;
       motion.phase = 'swing';
       if (contact === 2) figure.setFrame(`${pose}-1`);
-      motion.tween = this.tweens.add({ targets: figure, x: motion.homeX + sign * (emphatic ? 40 : 28), duration: 100, ease: 'Cubic.In' });
+      motion.tween = this.tweens.add({ targets: figure, x: motion.targetX, duration: 100, ease: 'Cubic.In' });
     }));
     // 피해 처리와 같은 시점에 접촉 프레임을 확정하고, 이후에만 복귀한다.
     motion.timers.push(this.time.delayedCall(impactDelay + (emphatic ? 390 : 330), () => {
@@ -1063,7 +1092,7 @@ class BattleScene extends Phaser.Scene {
     if (outcome.rhythmGain) {
       this.rhythm = Math.min(3, this.rhythm + outcome.rhythmGain);
       this.playEffect('rhythm', 185, 432, outcome.rhythmGain === 2 ? 98 : 76, outcome.rhythmGain === 2);
-      this.showFloatingText(145, 158, `리듬 +${outcome.rhythmGain}`, '#ffd56a', outcome.rhythmGain === 2);
+      this.showFloatingText(this.playerFigure.x, 158, `리듬 +${outcome.rhythmGain}`, '#ffd56a', outcome.rhythmGain === 2);
       this.pulseRhythm(outcome.rhythmGain === 2);
       audio.play('rhythm');
     }
@@ -1276,7 +1305,7 @@ class BattleScene extends Phaser.Scene {
     }
     at(endTime, () => {
       this.rhythm = Math.min(3, this.rhythm + gain);
-      if (gain) { this.showFloatingText(145, 158, `리듬 +${gain}`, '#ffd56a', gain === 2); this.pulseRhythm(gain === 2); audio.play('rhythm'); }
+      if (gain) { this.showFloatingText(this.playerFigure.x, 158, `리듬 +${gain}`, '#ffd56a', gain === 2); this.pulseRhythm(gain === 2); audio.play('rhythm'); }
       if (enemy.key === 'charge' && !interrupted) {
         this.enemyRhythm = Math.min(3, this.enemyRhythm + 1);
         lines.push('심판관이 힘을 모았다.');
