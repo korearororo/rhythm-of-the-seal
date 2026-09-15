@@ -1,0 +1,32 @@
+{
+  "novice-combat-sheet": {
+    "3": {
+      "texture": "combat-pose-corrections",
+      "bodyHeight": 224,
+      "baseOffset": 17,
+      "anchors": [200, 560, 920, 1280],
+      "frames": [[80,132,201,223],[442,131,199,225],[801,131,200,225],[1161,131,201,224]],
+      "source": "exec-3bbe3d16-5375-4112-87a5-f7fde588299e.png"
+    }
+  },
+  "orc-sentinel-combat-sheet": {
+    "1": {
+      "texture": "combat-pose-corrections",
+      "bodyHeight": 177,
+      "baseOffset": 0,
+      "anchors": [193,560,905,1265],
+      "frames": [[87,454,225,265],[435,483,260,236],[760,509,302,210],[1134,542,276,177]],
+      "source": "exec-3bbe3d16-5375-4112-87a5-f7fde588299e.png"
+    }
+  },
+  "skeleton-combat-sheet": {
+    "3": {
+      "texture": "combat-pose-corrections",
+      "bodyHeight": 208,
+      "baseOffset": 17,
+      "anchors": [210,565,918,1278],
+      "frames": [[49,827,290,201],[400,834,284,192],[747,858,309,170],[1126,832,274,197]],
+      "source": "exec-3bbe3d16-5375-4112-87a5-f7fde588299e.png"
+    }
+  }
+}

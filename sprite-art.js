@@ -13,6 +13,7 @@ const COMBAT_PALETTE = [
 
 function prepareCombatArt(scene) {
   const layouts = scene.cache.json.get('combat-atlas-layout');
+  const corrections = scene.cache.json.get('combat-row-corrections') || {};
   const audit = {};
   const colors = new Map();
   for (const [key, layout] of Object.entries(layouts)) {
@@ -38,8 +39,14 @@ function prepareCombatArt(scene) {
     ctx.imageSmoothingEnabled = false;
     const stats = [];
     layout.frames.forEach((row, rowIndex) => row.forEach(([x, y, w, h], col) => {
+      const correction = corrections[key]?.[rowIndex];
+      const rowSource = correction ? scene.textures.get(correction.texture).getSourceImage() : source;
+      const rowScale = correction ? scale * heights[2] / correction.bodyHeight : scale;
+      const rowAnchor = correction ? correction.anchors[col] : anchors[col];
+      const outputAnchor = anchor + (correction?.baseOffset || 0) * scale;
+      if (correction) [x, y, w, h] = correction.frames[col];
       ctx.clearRect(0, 0, grid, grid);
-      ctx.drawImage(source, x, y, w, h, Math.round(anchor + (x - anchors[col]) * scale), Math.round(grid * .9 - h * scale), Math.round(w * scale), Math.round(h * scale));
+      ctx.drawImage(rowSource, x, y, w, h, Math.round(outputAnchor + (x - rowAnchor) * rowScale), Math.round(grid * .9 - h * rowScale), Math.round(w * rowScale), Math.round(h * rowScale));
       const image = ctx.getImageData(0, 0, grid, grid), pixels = image.data;
       for (let i = 0; i < pixels.length; i += 4) {
         if (pixels[i + 3] < 192) { pixels[i + 3] = 0; continue; }
@@ -57,7 +64,7 @@ function prepareCombatArt(scene) {
       }
       ctx.putImageData(image, 0, 0);
       output.drawImage(cell, col * 280, rowIndex * 280, 280, 280);
-      stats.push({ row: rowIndex, col, grid, scale });
+      stats.push({ row: rowIndex, col, grid, scale: rowScale, correction: correction?.source || null });
     }));
     scene.textures.remove(key);
     scene.textures.addCanvas(key, packed).setFilter(Phaser.Textures.FilterMode.NEAREST);

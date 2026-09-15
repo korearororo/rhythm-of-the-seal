@@ -222,6 +222,8 @@ class BootScene extends Phaser.Scene {
 
   preload() {
     this.load.json('combat-atlas-layout', 'assets/combat-atlas-layout.json');
+    this.load.json('combat-row-corrections', 'assets/combat-row-corrections.json');
+    this.load.image('combat-pose-corrections', 'assets/combat-pose-corrections.png');
     this.load.image('shrine-kit', 'assets/shrine-kit.png');
     this.load.image('characters', 'assets/characters.png');
     this.load.image('skeleton-shrine-keeper', 'assets/skeleton-shrine-keeper.png');
@@ -293,7 +295,9 @@ class BootScene extends Phaser.Scene {
     [['kobold', 'kobold-shaman-combat-sheet'], ['orc', 'orc-sentinel-combat-sheet']].forEach(([enemyId, textureKey]) => {
       const combatTexture = this.textures.get(textureKey);
       ['idle', 'attack', 'guard', 'charge', 'hurt', 'heavy', 'parry', 'down'].forEach((row, rowIndex) => {
-        for (let column = 0; column < 4; column++) combatTexture.add(`${row}-${column}`, 0, column * 280, rowIndex * 280, 280, 280);
+        // 오크는 방패가 유지되는 작은 도끼질을 일반 공격, 새 큰 궤적을 강공격으로 쓴다.
+        const sourceRow = enemyId === 'orc' ? (row === 'attack' ? 5 : row === 'heavy' ? 1 : rowIndex) : rowIndex;
+        for (let column = 0; column < 4; column++) combatTexture.add(`${row}-${column}`, 0, column * 280, sourceRow * 280, 280, 280);
         this.anims.create({
           key: `${enemyId}-${row}`,
           frames: combatFrames(textureKey, row),
