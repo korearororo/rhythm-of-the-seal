@@ -299,13 +299,21 @@ class BootScene extends Phaser.Scene {
       });
     });
     // 시각 QA 전용 바로가기: 전투 규칙을 건드리지 않고 정상 보스 초기 상태로만 진입한다.
-    const qaBoss = new URLSearchParams(window.location.search).get('qa') === 'boss';
+    // qaPose는 포즈를 반복 표시하고 qaOutcome은 기존 결과 화면만 즉시 재현한다.
+    const qaParams = new URLSearchParams(window.location.search);
+    const qaBoss = qaParams.get('qa') === 'boss';
+    const qaPose = ['heavy', 'hurt'].includes(qaParams.get('qaPose')) ? qaParams.get('qaPose') : null;
+    const qaOutcome = ['lose', 'win'].includes(qaParams.get('qaOutcome')) ? qaParams.get('qaOutcome') : null;
     if (qaBoss) {
       this.registry.set('battleOrder', ENEMY_ORDER);
       this.registry.set('battleIndex', ENEMY_ORDER.indexOf('arbiter'));
       this.registry.set('carriedPlayerHp', null);
+      this.registry.set('bossQaHook', qaOutcome ? { outcome: qaOutcome } : (qaPose ? { pose: qaPose } : null));
       this.scene.start('battle');
-    } else this.scene.start('intro');
+    } else {
+      this.registry.set('bossQaHook', null);
+      this.scene.start('intro');
+    }
   }
 }
 
@@ -356,7 +364,27 @@ class BattleScene extends Phaser.Scene {
     this.buildBackground();
     this.buildUi();
     this.resetBattle();
+    this.applyBossQaHook();
     this.events.once('shutdown', () => { this.stopDownMotion(); this.stopEnemyDownMotion(); audio.stopAll(); });
+  }
+
+  applyBossQaHook() {
+    const hook = this.registry.get('bossQaHook');
+    if (!this.enemyConfig.boss || !hook) return;
+    if (hook.pose) {
+      // 한 번 재생 후 idle로 돌아가는 일반 포즈와 달리, QA 화면에서는 관찰할 수 있게 반복한다.
+      this.enemyFigure.play({ key: `${this.enemyConfig.combatAnimKey}-${hook.pose}`, repeat: -1 }, true);
+      return;
+    }
+    // 결과 재현은 이 장면을 열 때 한 번만 적용한다. 다시 시작과 이후 정상 전투는 기존 초기화 경로를 쓴다.
+    this.registry.set('bossQaHook', null);
+    if (hook.outcome === 'lose') {
+      this.playerHp = 0;
+      this.finish(false, 'QA: 패배 후 다시 시작 화면 확인');
+    } else if (hook.outcome === 'win') {
+      this.enemyHp = 0;
+      this.finish(true, 'QA: 승리 엔딩 전환 확인');
+    }
   }
 
   text(x, y, value, size = 14, color = '#f8f1ff', align = 'left') {
