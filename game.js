@@ -90,6 +90,9 @@ const ENEMY_INTENT_DEFS = {
   heavy: { key: 'heavy', name: '강공격', detail: '거칠게 내려찍습니다!', damage: 10 },
 };
 
+// 첫 플레이의 일반전 연속 생존 여유. 보스 전은 아래 전환 규칙에서 항상 완전 회복한다.
+const GENERAL_BATTLE_HEAL = 15;
+
 // 다음 세션에서 새 적을 추가할 때는 ENEMY_PRESETS에 새 객체만 추가하면 됩니다.
 // 필요한 항목: 로그명/표시명, 최대 HP, 행동 예고 순서, 스프라이트.
 const ENEMY_PRESETS = {
@@ -1344,7 +1347,7 @@ class BattleScene extends Phaser.Scene {
       const nextEnemy = ENEMY_PRESETS[this.battleOrder[nextIndex]];
       const carriedPlayerHp = nextEnemy?.boss
         ? this.playerMaxHp
-        : Math.min(this.playerMaxHp, this.playerHp + Math.ceil(this.playerMaxHp * .2));
+        : Math.min(this.playerMaxHp, this.playerHp + GENERAL_BATTLE_HEAL);
       this.registry.set('carriedPlayerHp', carriedPlayerHp);
       this.registry.set('defeatedEnemyId', this.enemyConfig.id);
       this.registry.set('battleIndex', nextIndex);
@@ -1434,7 +1437,7 @@ class BattleTransitionScene extends Phaser.Scene {
     const preparation = typeof carriedPlayerHp === 'number'
       ? (nextEnemy.boss
         ? '전투 준비: HP 완전 회복 · 리듬 0으로 시작'
-        : `전투 준비: HP ${carriedPlayerHp} · 최대 HP 20% 회복 · 리듬 0으로 시작`)
+        : `전투 준비: HP ${carriedPlayerHp} · 일반전 승리 +${GENERAL_BATTLE_HEAL} 회복 · 리듬 0으로 시작`)
       : '전투 준비: HP 34 · 리듬 0으로 시작';
     this.add.text(WIDTH / 2, 269, preparation, { fontFamily: UI_FONT, fontSize: '14px', fontStyle: 'bold', color: '#ffd56a' }).setOrigin(.5);
     if (nextEnemy.boss) {
