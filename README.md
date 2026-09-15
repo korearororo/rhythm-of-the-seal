@@ -1,5 +1,7 @@
 # 봉인의 박자
 
+[English](#english)
+
 적의 반복 동작을 기억하고 빈틈에 힘을 모으는 **중세 판타지 턴제 RPG**입니다. 고블린부터 봉인 심판관까지 다섯 전투를 플레이할 수 있습니다.
 
 ![봉인 심판관과의 최종 전투](docs/portfolio/04-boss.png)
@@ -54,7 +56,7 @@ python -m http.server 8000 --bind 127.0.0.1
 
 ## 구현 포인트
 
-- 캐릭터 스프라이트는 프레임 좌표표를 기준으로 패킹하며 공통 팔레트와 발 기준선을 적용합니다.
+- 캐릭터 6종의 스프라이트는 프레임 좌표표를 기준으로 패킹하며, 공통 팔레트·픽셀 크기·발 기준선을 적용합니다. 긴 무기와 검격도 프레임 경계 안에 표시합니다.
 
 - Phaser 3 + JavaScript로 만든 900×620 단일 페이지 웹 게임입니다.
 - 적 프리셋은 HP·스프라이트·숨은 패턴을 데이터로 분리하며, 일반 적은 공격·방어·충전과 적 리듬 상태를 공유합니다.
@@ -74,6 +76,14 @@ python -m http.server 8000 --bind 127.0.0.1
 
 위 화면은 실제 게임 캔버스 캡처입니다. 보스와 엔딩 이미지는 장면 확인용 진입 경로로 촬영했습니다.
 
+## 파일 구성
+
+- `index.html`, `style.css`: 실행 페이지와 화면 스타일
+- `game.js`: 장면 전환, 전투 규칙, 입력과 연출
+- `sprite-art.js`: 스프라이트 패킹과 애니메이션 프레임 구성
+- `assets/`: 게임이 로드하는 이미지와 프레임 좌표 데이터
+- `docs/portfolio/`: 게임 소개 스크린샷
+
 ## 알려진 제한
 
 - 첫 플레이 15~20분은 설계 목표이며, 다른 사람의 실제 플레이 시간으로 검증하지 않았습니다.
@@ -81,3 +91,85 @@ python -m http.server 8000 --bind 127.0.0.1
 - 공개 배포 서비스와 공개 플레이 URL은 아직 선택하지 않았습니다.
 - 진행 저장, 장비·인벤토리, 다수 적 전투는 현재 5전투 버전의 범위에 포함하지 않았습니다.
 - Phaser를 CDN으로 불러오므로 완전한 오프라인 실행 패키지는 아직 제공하지 않습니다.
+
+---
+
+## English
+
+# Rhythm of the Seal
+
+A small, medieval fantasy turn-based RPG about remembering enemy patterns and finding the right moment to gather strength. Fight through five encounters, from a goblin scout to the Seal Arbiter.
+
+### Gameplay
+
+Enemies follow deterministic rules instead of choosing moves randomly. Their next action is hidden. Watch their movements and previous results, then choose between attacking, defending, focusing, and spending three Rhythm points on a heavy attack.
+
+- Attack to deal damage and interrupt an enemy's charge.
+- Defend to reduce damage. Blocking a heavy attack grants extra Rhythm.
+- Focus to gain Rhythm, with a larger reward against a defending enemy. Getting hit while focusing knocks you down.
+- Interrupt the boss's charge or block its heavy attack to expose the seal, then follow up with a heavy attack.
+
+### Run locally
+
+You need Python 3 and a web browser. No npm installation or build step is required. Phaser 3.90 loads from a CDN, so an internet connection is required when the library is not cached.
+
+```sh
+git clone https://github.com/korearororo/the.git
+cd the
+python -m http.server 8000 --bind 127.0.0.1
+```
+
+Open [http://127.0.0.1:8000/](http://127.0.0.1:8000/) and select **첫 전투 시작** (Start First Battle). Press `Ctrl+C` in the terminal to stop the server. The game's interface is currently in Korean.
+
+### Controls
+
+Click or tap one of the four commands at the bottom of the screen.
+
+| Command | In-game label | Effect |
+| --- | --- | --- |
+| Attack | 공격 | Deals 7 damage. Interrupting a charge grants 2 Rhythm and disrupts the enemy's next attack. |
+| Defend | 방어 | Reduces incoming damage. Blocking a heavy attack grants 2 Rhythm. |
+| Focus | 집중 | Gains 1 Rhythm, or 2 against a defending enemy. Taking a hit causes knockdown. |
+| Heavy Attack | 강공격 | Spends all 3 Rhythm to deal 16 damage, or 24 against the boss's exposed seal. |
+
+Input is locked while an action resolves. Animations, HP bars, Rhythm, damage popups, sound effects, and the combat log show the result together. Defending reduces damage from both normal and heavy attacks.
+
+### Five encounters
+
+| Stage | Enemy | Key decision |
+| ---: | --- | --- |
+| 1 | Goblin Scout | Learn the attack–defend rhythm and focus during openings. |
+| 2 | Skeleton Shrine Keeper | Remember consecutive attacks. |
+| 3 | Kobold Shaman | Interrupt charges and manage enemy Rhythm. |
+| 4 | Orc Sentinel | Anticipate conditional heavy attacks within a longer pattern. |
+| 5 | Seal Arbiter | Combine focusing, interruption, defense, and seal exposure. |
+
+Winning a regular encounter restores 15 HP and resets player Rhythm to zero. Before the boss, HP is fully restored to 34 and Rhythm is reset. Defeat restarts the current encounter.
+
+### Implementation
+
+- Phaser 3 and JavaScript, rendered on a 900×620 canvas.
+- Six characters use coordinate-based sprite packing with a shared palette, pixel scale, and foot baseline. Long weapons and attack trails remain within their frame boundaries.
+- Enemy presets separate health, graphics, and hidden patterns from action resolution.
+- Explicit combat state handles Rhythm, knockdown, charge interruption, skipped attacks, and conditional heavy attacks.
+- The boss chooses a short action sequence using health and player Rhythm at the start of that sequence.
+- Character motion, impact effects, HP changes, popups, and Web Audio effects are synchronized with action resolution.
+
+### Screenshots
+
+The screenshots in the Korean section above are captured from the actual game canvas. Boss and ending screenshots use scene-preview entry points.
+
+### Project structure
+
+- `index.html`, `style.css`: launch page and page styling
+- `game.js`: scenes, combat rules, input, and presentation
+- `sprite-art.js`: sprite packing and animation frame configuration
+- `assets/`: runtime images and frame-coordinate data
+- `docs/portfolio/`: game screenshots
+
+### Current limitations
+
+- A 15–20 minute first playthrough is a design target, not a measured result from external playtesting.
+- A public hosting service and playable URL have not been selected.
+- Saving progress, equipment, inventory, and encounters with multiple enemies are outside the current five-encounter version.
+- A fully offline package is not provided; Phaser currently loads from a CDN.

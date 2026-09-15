@@ -1,3 +1,11 @@
 __pycache__/
 *.py[cod]
 .DS_Store
+
+# Local development notes and review evidence
+/*.md
+!/README.md
+/tools/
+/docs/art/
+/assets/player-slash-effect.png
+/.local-dev/
