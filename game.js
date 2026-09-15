@@ -385,7 +385,7 @@ class BattleScene extends Phaser.Scene {
     this.resetBattle();
     // 장면 초기화가 끝난 뒤 훅을 적용해야 QA 승리의 기존 800ms 타이머가 안정적으로 시작된다.
     this.time.delayedCall(32, () => this.applyBossQaHook());
-    this.events.once('shutdown', () => { this.stopDownMotion(); this.stopEnemyDownMotion(); audio.stopAll(); });
+    this.events.once('shutdown', () => { this.clearVictoryTransition(); this.stopDownMotion(); this.stopEnemyDownMotion(); audio.stopAll(); });
   }
 
   applyBossQaHook() {
@@ -497,6 +497,28 @@ class BattleScene extends Phaser.Scene {
     this.text(WIDTH / 2, 22, this.enemyConfig.encounterLabel, 18, '#ffd56a', 'center');
   }
 
+  clearVictoryTransition() {
+    if (this.victoryTimer) this.victoryTimer.remove(false);
+    if (this.victoryFallbackTimer) window.clearTimeout(this.victoryFallbackTimer);
+    this.victoryTimer = null;
+    this.victoryFallbackTimer = null;
+  }
+
+  scheduleBossVictoryTransition() {
+    // 기본 플레이와 QA 승리는 같은 EndingScene 경로를 쓴다. Phaser 장면 시간이
+    // 비활성 탭에서 멈춰도 끝 화면에 갇히지 않게 브라우저 타이머를 한 번만 백업한다.
+    this.clearVictoryTransition();
+    this.victoryTransitionComplete = false;
+    const advance = () => {
+      if (this.victoryTransitionComplete || !this.scene.isActive()) return;
+      this.victoryTransitionComplete = true;
+      this.clearVictoryTransition();
+      this.advanceAfterVictory();
+    };
+    this.victoryTimer = this.time.delayedCall(800, advance);
+    this.victoryFallbackTimer = window.setTimeout(advance, 1000);
+  }
+
   buildUi() {
     this.intentPanel = this.panel(225, 95, 410, 88); this.intentText = this.text(225, 64, '', 17, '#ffd56a', 'center'); this.intentDetail = this.text(225, 98, '', 12, '#c6b6d8', 'center');
     this.playerName = this.text(38, 290, '수습 기사', 16);
@@ -559,11 +581,11 @@ class BattleScene extends Phaser.Scene {
 
   resetBattle() {
     audio.stopAll();
-    if (this.victoryTimer) this.victoryTimer.remove(false);
+    this.clearVictoryTransition();
     if (this.actionUnlockTimer) this.actionUnlockTimer.remove(false);
     this.clearResolutionTimers();
-    this.victoryTimer = null;
     this.actionUnlockTimer = null;
+    this.victoryTransitionComplete = false;
     this.inputLocked = false;
     this.resolutionPhase = 'idle';
     const enemy = this.enemyConfig;
@@ -1338,10 +1360,7 @@ class BattleScene extends Phaser.Scene {
         this.playEffect('rhythm', this.enemyFigure.x, this.enemyFigure.y, 250, true);
         audio.play('victory');
         this.tweens.add({ targets: this.enemyFigure, alpha: 0, duration: 800 });
-        this.victoryTimer = this.time.delayedCall(800, () => {
-          this.victoryTimer = null;
-          this.advanceAfterVictory();
-        });
+        this.scheduleBossVictoryTransition();
         return;
       }
       this.advanceAfterVictory();
