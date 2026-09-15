@@ -419,6 +419,7 @@ class BattleScene extends Phaser.Scene {
 
   setPlayerPose(pose, hold = false) {
     if (!this.playerFigure?.active) return;
+    this.cancelStrikeMotion('player');
     // 수습 기사 전투 시트 원본은 오른쪽을 향한다. 모든 포즈 전환 뒤에도
     // 좌측 기사는 원본 방향 그대로 오른쪽의 적을 바라본다.
     this.playerFigure.setFlipX(false);
@@ -458,6 +459,7 @@ class BattleScene extends Phaser.Scene {
     if (!this.enemyConfig.combatSheet || !this.enemyFigure?.active) return;
     const prefix = this.enemyConfig.combatAnimKey;
     if (!this.anims.exists(`${prefix}-${pose}`)) return;
+    this.cancelStrikeMotion('enemy');
     if (pose === 'down') this.startEnemyDownMotion();
     else this.stopEnemyDownMotion();
     this.enemyFigure.play(`${prefix}-${pose}`, true);
@@ -487,7 +489,7 @@ class BattleScene extends Phaser.Scene {
   buildBackground() {
     this.cameras.main.setBackgroundColor('#171024');
     if (this.enemyConfig.boss) {
-      this.add.image(WIDTH / 2, HEIGHT / 2, 'seal-arbiter-arena').setDisplaySize(WIDTH, HEIGHT);
+      this.add.image(WIDTH / 2, HEIGHT / 2 - 60, 'seal-arbiter-arena').setDisplaySize(WIDTH, HEIGHT);
     } else {
       this.add.rectangle(WIDTH / 2, 374, WIDTH, 235, 0x21172e);
       pixelSprite(this, WIDTH / 2, 228, 'shrine-kit', 'arch', 390, .25);
@@ -522,7 +524,7 @@ class BattleScene extends Phaser.Scene {
   }
 
   buildUi() {
-    this.intentPanel = this.panel(225, 95, 410, 88); this.intentText = this.text(225, 64, '', 17, '#ffd56a', 'center'); this.intentDetail = this.text(225, 98, '', 12, '#c6b6d8', 'center');
+    this.intentPanel = this.panel(450, 95, 600, 66); this.intentText = this.text(450, 70, '', 15, '#ffd56a', 'center'); this.intentDetail = this.text(450, 99, '', 12, '#c6b6d8', 'center');
     this.playerName = this.text(38, 290, '수습 기사', 16);
     this.enemyName = this.text(650, 290, '', 16);
     this.playerHpText = this.text(38, 315, '', 12); this.enemyHpText = this.text(650, 315, '', 12);
@@ -688,12 +690,13 @@ class BattleScene extends Phaser.Scene {
       figure.anims.stop();
       figure.setFrame('guard-2');
     }
-    const compactGoblinGuard = side === 'enemy' && this.enemyConfig.id === 'goblin';
     figure.setTint(0x83d6ff);
     this.time.delayedCall(emphatic ? 520 : 440, () => {
       if (figure?.active) figure.clearTint();
     });
-    this.playEffect('guard', figure.x, figure.y, compactGoblinGuard ? (emphatic ? 94 : 80) : (emphatic ? 128 : 112), emphatic, emphatic ? 620 : 520, compactGoblinGuard ? 5 : 15);
+    const frontX = figure.x + (side === 'player' ? 40 : -36);
+    const chestY = figure.y - (side === 'player' ? 8 : 58);
+    this.playEffect('guard', frontX, chestY, emphatic ? 38 : 30, false, 260, 15);
     audio.play('defend');
   }
 
@@ -741,17 +744,60 @@ class BattleScene extends Phaser.Scene {
     this.enemyFigure.setPosition(base.x, base.y).setScale(base.scaleX, base.scaleY).setAngle(base.angle);
   }
 
-  animateLunge(side, emphatic = false) {
+  cancelStrikeMotion(side) {
+    const motion = this.strikeMotions?.[side];
+    if (!motion) return;
+    motion.tween?.stop();
+    motion.timers.forEach(timer => timer.remove(false));
+    if (motion.figure.active) motion.figure.setX(motion.homeX);
+    delete this.strikeMotions[side];
+  }
+
+  strikeImpact(side) {
+    const motion = this.strikeMotions?.[side];
+    if (!motion || motion.hit) return;
+    motion.hit = true;
+    motion.tween?.stop();
+    motion.figure.setX(motion.homeX + (side === 'player' ? 1 : -1) * (motion.heavy ? 40 : 28));
+    motion.figure.setFrame(`${motion.pose}-${motion.contact}`);
+    motion.phase = 'impact';
+    const hold = motion.heavy ? 180 : 120;
+    motion.timers.push(this.time.delayedCall(hold, () => {
+      if (!motion.figure.active) return;
+      motion.phase = 'recovery';
+      motion.figure.setFrame(`${motion.pose}-${motion.contact === 1 ? 2 : 3}`);
+      if (motion.contact === 1) motion.timers.push(this.time.delayedCall(90, () => {
+        if (motion.figure.active) motion.figure.setFrame(`${motion.pose}-3`);
+      }));
+      motion.tween = this.tweens.add({ targets: motion.figure, x: motion.homeX, duration: 200, ease: 'Sine.InOut' });
+    }));
+  }
+
+  animateLunge(side, emphatic = false, impactDelay = emphatic ? 560 : 360) {
     const figure = side === 'player' ? this.playerFigure : this.enemyFigure;
-    const distance = (side === 'player' ? 1 : -1) * (emphatic ? 38 : 24);
-    this.tweens.add({
-      targets: figure,
-      x: figure.x + distance,
-      duration: emphatic ? 145 : 150,
-      yoyo: true,
-      hold: emphatic ? 100 : 80,
-      ease: 'Cubic.Out',
-    });
+    if (!this.inputLocked) return; // 동기 규칙 검사에는 표시용 시간축을 만들지 않는다.
+    this.cancelStrikeMotion(side);
+    const sign = side === 'player' ? 1 : -1;
+    const pose = emphatic ? 'heavy' : 'attack';
+    const contact = emphatic || (side === 'enemy' && ['orc', 'kobold'].includes(this.enemyConfig.id)) ? 2 : 1;
+    const motion = { figure, pose, contact, heavy: emphatic, homeX: figure.x, timers: [], phase: 'anticipation', hit: false };
+    (this.strikeMotions ||= {})[side] = motion;
+    figure.anims.pause();
+    figure.setFrame(`${pose}-0`);
+    motion.tween = this.tweens.add({ targets: figure, x: motion.homeX - sign * 4, duration: Math.max(80, impactDelay - 100), ease: 'Sine.InOut' });
+    motion.timers.push(this.time.delayedCall(impactDelay - 100, () => {
+      if (!figure.active) return;
+      motion.phase = 'swing';
+      if (contact === 2) figure.setFrame(`${pose}-1`);
+      motion.tween = this.tweens.add({ targets: figure, x: motion.homeX + sign * (emphatic ? 40 : 28), duration: 100, ease: 'Cubic.In' });
+    }));
+    // 피해 처리와 같은 시점에 접촉 프레임을 확정하고, 이후에만 복귀한다.
+    motion.timers.push(this.time.delayedCall(impactDelay + (emphatic ? 390 : 330), () => {
+      if (!figure.active || this.strikeMotions?.[side] !== motion) return;
+      this.cancelStrikeMotion(side);
+      if (side === 'player') this.setPlayerPose('idle', true);
+      else this.setEnemyPose('idle', true);
+    }));
   }
 
   setHealth(side, value, animate = true) {
@@ -836,13 +882,12 @@ class BattleScene extends Phaser.Scene {
     const baseScaleX = figure.scaleX;
     const baseScaleY = figure.scaleY;
     figure.setTint(0xffd56a);
-    this.playEffect('rhythm', figure.x, figure.y - 42, 116, true, 520, 16);
-    this.playEffect('attack', figure.x - 44, figure.y - 4, 92, true, 420, 16);
+    this.playEffect('rhythm', figure.x, figure.y - 58, 44, false, 300, 16);
     this.tweens.add({
       targets: figure,
-      scaleX: baseScaleX * .9,
-      scaleY: baseScaleY * .9,
-      angle: -10,
+      scaleX: baseScaleX,
+      scaleY: baseScaleY,
+      angle: -4,
       duration: 120,
       yoyo: true,
       hold: 160,
@@ -951,6 +996,7 @@ class BattleScene extends Phaser.Scene {
 
   applyTutorialEnemyHit(outcome, fromPointer = false) {
     if (!outcome.playerDamage || this.enemyHp <= 0) return;
+    this.strikeImpact('player');
     this.resolutionPhase = 'collision';
     this.setHealth('enemy', this.enemyHp - outcome.playerDamage);
     const guarded = outcome.enemy.key === 'defend';
@@ -975,15 +1021,15 @@ class BattleScene extends Phaser.Scene {
         });
       }
     }
-    // 왼쪽의 기사가 내리친 지점에 효과를 두어, 방어 중인 적의 몸통·가드 효과를 덮지 않는다.
-    // 가드 중 고블린의 몸통·가드 파형보다 왼쪽, 즉 양측 사이에서만 충돌시킨다.
-    const impactX = this.enemyFigure.x - (guarded ? 172 : 88);
-    this.playEffect('attack', impactX, this.enemyFigure.y - 4, outcome.action === 'finisher' ? 112 : (guarded ? 60 : 78), outcome.action === 'finisher', undefined, 6);
+    // 검격은 공격 시트에 있다. 몸통 접촉 표식만 작게 두고 가드는 중복하지 않는다.
+    const impactX = this.enemyFigure.x - 36;
+    if (!guarded) this.playEffect('attack', impactX, this.enemyFigure.y - 58, 26, false, 150, 15);
     this.showFloatingText(this.enemyFigure.x, this.enemyFigure.y - 58, `-${outcome.playerDamage}`, '#ffb1b8', outcome.action === 'finisher');
   }
 
   applyTutorialPlayerHit(outcome) {
     if (!outcome.enemyDamage || this.playerHp <= 0 || this.enemyHp <= 0) return;
+    this.strikeImpact('enemy');
     this.resolutionPhase = 'collision';
     this.setHealth('player', this.playerHp - outcome.enemyDamage);
     const blocked = outcome.action === 'defend';
@@ -1061,15 +1107,13 @@ class BattleScene extends Phaser.Scene {
     const beginEnemyStrike = () => {
       if (this.enemyHp <= 0) return;
       this.setEnemyPose(enemyIsHeavy ? 'heavy' : 'attack', true);
-      this.animateLunge('enemy', enemyIsHeavy);
+      this.animateLunge('enemy', enemyIsHeavy, enemyStrikeDuration);
       if (enemyIsHeavy) this.cameras.main.shake(90, .0025);
       audio.play(enemyIsHeavy ? 'heavy' : 'enemyAttack');
     };
     const beginEnemyCharge = () => {
       if (this.enemyHp <= 0) return;
       this.setEnemyPose('charge', true);
-      const baseScale = this.enemyFigure.scaleX;
-      this.tweens.add({ targets: this.enemyFigure, scaleX: baseScale * 1.1, scaleY: baseScale * 1.1, duration: 150, yoyo: true, ease: 'Sine.InOut' });
       audio.play('charge');
     };
     const showPlayerGuardSelection = () => {
@@ -1114,13 +1158,13 @@ class BattleScene extends Phaser.Scene {
     }
 
     if (outcome.enemy.key === 'charge') {
+      beginEnemyCharge();
       if (playerStrike) {
         beginPlayerStrike();
         this.scheduleResolution(strikeDuration, () => this.applyTutorialEnemyHit(outcome, true));
         this.scheduleResolution(760 + strikeDuration, finish);
       } else {
         if (action === 'defend') showPlayerGuardSelection(); else beginFocus();
-        this.scheduleResolution(360, beginEnemyCharge);
         this.scheduleResolution(1050, finish);
       }
       return;
@@ -1129,18 +1173,18 @@ class BattleScene extends Phaser.Scene {
     if (action === 'defend') {
       showPlayerGuardSelection();
       this.scheduleResolution(440, beginEnemyStrike);
-      this.scheduleResolution(enemyIsHeavy ? 960 : 780, () => this.applyTutorialPlayerHit(outcome));
+      this.scheduleResolution(440 + enemyStrikeDuration, () => this.applyTutorialPlayerHit(outcome));
       this.scheduleResolution(enemyIsHeavy ? 1560 : 1280, finish);
     } else if (action === 'focus') {
       beginFocus();
       this.scheduleResolution(460, beginEnemyStrike);
-      this.scheduleResolution(800, () => this.applyTutorialPlayerHit(outcome));
-      this.scheduleResolution(1350, finish);
+      this.scheduleResolution(460 + enemyStrikeDuration, () => this.applyTutorialPlayerHit(outcome));
+      this.scheduleResolution(1060 + enemyStrikeDuration, finish);
     } else {
       beginPlayerStrike();
       this.scheduleResolution(strikeDuration, () => this.applyTutorialEnemyHit(outcome, true));
       this.scheduleResolution(420 + strikeDuration, beginEnemyStrike);
-      this.scheduleResolution((enemyIsHeavy ? 940 : 760) + strikeDuration, () => this.applyTutorialPlayerHit(outcome));
+      this.scheduleResolution(420 + enemyStrikeDuration + strikeDuration, () => this.applyTutorialPlayerHit(outcome));
       this.scheduleResolution((enemyIsHeavy ? 1540 : 1220) + strikeDuration, finish);
     }
   }
@@ -1183,15 +1227,16 @@ class BattleScene extends Phaser.Scene {
     const enemyImpact = enemyStart + (enemy.key === 'heavy' ? 620 : 400);
     const endTime = (attacking ? enemyImpact : strike ? impact : 500) + 700;
     if (strike) {
-      at(180, () => { this.setPlayerPose(heavy ? 'heavy' : 'attack', true); this.animateLunge('player', heavy); });
+      at(180, () => { this.setPlayerPose(heavy ? 'heavy' : 'attack', true); this.animateLunge('player', heavy, impact - 180); });
       at(impact, () => {
+        this.strikeImpact('player');
         this.resolutionPhase = 'collision';
         if (heavy) this.rhythm = 0;
         this.setHealth('enemy', this.enemyHp - playerDamage);
         this.setEnemyPose(interrupted ? 'down' : guarding ? 'guard' : 'hurt', true);
         if (guarding) { this.showGuard('enemy', true); this.animateGuardParry('enemy'); }
         else this.flashCombatant('enemy', 0xeb5b67, heavy);
-        this.playEffect('attack', this.enemyFigure.x - 70, this.enemyFigure.y, heavy ? 112 : 78, heavy);
+        if (!guarding) this.playEffect('attack', this.enemyFigure.x - 36, this.enemyFigure.y - 58, 26, false, 150, 15);
         this.showFloatingText(this.enemyFigure.x, this.enemyFigure.y - 58, `-${playerDamage}`, guarding ? '#9fdcff' : '#ffb1b8', heavy);
         audio.play(heavy ? 'finisher' : 'attack');
         lines.push(guarding ? `적이 막았다. 피해 ${playerDamage}.` : `${heavy ? '강공격' : '공격'} ${playerDamage} 피해.`);
@@ -1211,9 +1256,10 @@ class BattleScene extends Phaser.Scene {
       at(enemyStart, () => {
         if (strike) this.setPlayerPose('idle', true);
         this.setEnemyPose(enemy.key === 'heavy' ? 'heavy' : 'attack', true);
-        this.animateLunge('enemy', enemy.key === 'heavy');
+        this.animateLunge('enemy', enemy.key === 'heavy', enemyImpact - enemyStart);
       });
       at(enemyImpact, () => {
+        this.strikeImpact('enemy');
         this.resolutionPhase = 'collision';
         this.setHealth('player', this.playerHp - enemyDamage);
         this.setPlayerPose(down ? 'down' : action === 'defend' ? 'guard' : 'hurt', true);
@@ -1328,9 +1374,9 @@ class BattleScene extends Phaser.Scene {
     const detail = this.over ? (this.enemyHp <= 0 ? '길을 막던 적이 쓰러졌다.' : '이 전투의 처음부터 다시 도전할 수 있다.') : tutorial ? '고블린은 공격과 방어 자세를 반복합니다.' : '적은 같은 동작을 반복한다. 빈틈을 찾아보자.';
     this.intentText.setText(headline).setColor(patternEnemy && !this.over ? '#ffd56a' : intentColor);
     this.intentDetail.setText(detail);
-    this.intentPanel.setVisible(!boss).setStrokeStyle(patternEnemy ? 3 : enemy.key === 'heavy' ? 5 : 3, patternEnemy ? this.colors.gold : Phaser.Display.Color.HexStringToColor(intentColor).color);
+    this.intentPanel.setVisible(!boss && (tutorial || this.over)).setStrokeStyle(1, 0x776344);
     this.intentText.setVisible(!boss || this.over);
-    this.intentDetail.setVisible(!boss || this.over);
+    this.intentDetail.setVisible((!boss && tutorial) || this.over);
     if (!boss && !patternEnemy && !this.over && this.lastIntentKey !== enemy.key) {
       this.lastIntentKey = enemy.key;
       this.animateIntent(enemy);
