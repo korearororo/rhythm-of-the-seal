@@ -369,9 +369,8 @@ class BattleScene extends Phaser.Scene {
     this.buildBackground();
     this.buildUi();
     this.resetBattle();
-    this.applyBossQaHook();
-    // resetBattle/create의 첫 프레임 작업 뒤에도 포즈가 idle로 덮이지 않도록 한 번 더 적용한다.
-    this.time.delayedCall(0, () => this.applyBossQaHook());
+    // 장면 초기화가 끝난 뒤 훅을 적용해야 QA 승리의 기존 800ms 타이머가 안정적으로 시작된다.
+    this.time.delayedCall(32, () => this.applyBossQaHook());
     this.events.once('shutdown', () => { this.stopDownMotion(); this.stopEnemyDownMotion(); audio.stopAll(); });
   }
 
