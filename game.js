@@ -224,6 +224,7 @@ class BootScene extends Phaser.Scene {
     this.load.json('combat-atlas-layout', 'assets/combat-atlas-layout.json');
     this.load.json('combat-row-corrections', 'assets/combat-row-corrections.json');
     this.load.image('combat-pose-corrections', 'assets/combat-pose-corrections.png');
+    this.load.image('combat-heavy-corrections', 'assets/combat-heavy-corrections.png');
     this.load.image('shrine-kit', 'assets/shrine-kit.png');
     this.load.image('characters', 'assets/characters.png');
     this.load.image('skeleton-shrine-keeper', 'assets/skeleton-shrine-keeper.png');
@@ -618,8 +619,9 @@ class BattleScene extends Phaser.Scene {
     this.enemyName.setText(enemy.displayName);
     this.stopEnemyDownMotion();
     if (this.enemyFigure) this.enemyFigure.destroy();
+    const art = this.registry.get('combatArtAudit')?.[enemy.sprite.texture];
     this.enemyFigure = enemy.combatSheet
-      ? this.add.sprite(enemy.sprite.x, enemy.sprite.y, enemy.sprite.texture, enemy.sprite.frame).setOrigin(.5, .9286).setScale(enemy.sprite.scale / 280).setFlipX(enemy.sprite.flipX).play(`${enemy.combatAnimKey}-idle`)
+      ? this.add.sprite(enemy.sprite.x, enemy.sprite.y, enemy.sprite.texture, enemy.sprite.frame).setOrigin(art?.originX ?? .5, .9286).setScale((art?.display || enemy.sprite.scale) / 280).setFlipX(enemy.sprite.flipX).play(`${enemy.combatAnimKey}-idle`)
       : pixelSprite(this, enemy.sprite.x, enemy.sprite.y, enemy.sprite.texture, enemy.sprite.frame, enemy.sprite.scale).setFlipX(enemy.sprite.flipX);
     this.goblinBasePose = enemy.id === 'goblin'
       ? { x: this.enemyFigure.x, y: this.enemyFigure.y, scaleX: this.enemyFigure.scaleX, scaleY: this.enemyFigure.scaleY, angle: this.enemyFigure.angle }
@@ -692,7 +694,7 @@ class BattleScene extends Phaser.Scene {
     this.time.delayedCall(emphatic ? 280 : 180, () => {
       if (figure?.active) figure.clearTint();
     });
-    if (knockback) this.tweens.add({ targets: figure, x: figure.x + (side === 'player' ? -8 : 8), duration: emphatic ? 55 : 75, yoyo: true, repeat: emphatic ? 2 : 1 });
+    if (knockback) this.tweens.add({ targets: figure, x: figure.x + (side === 'player' ? -1 : 1) * (emphatic ? 12 : 8), duration: 70, yoyo: true, hold: 80, ease: 'Cubic.Out' });
   }
 
   showGuard(side, emphatic = false) {

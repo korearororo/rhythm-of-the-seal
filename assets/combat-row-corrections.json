@@ -1,5 +1,11 @@
 {
   "novice-combat-sheet": {
+    "4": {
+      "texture": "combat-heavy-corrections", "bodyHeight": 211, "baseOffset": 17,
+      "anchors": [211,603,980,1370],
+      "frames": [[97,724,208,209],[512,724,182,210],[875,754,193,179],[1257,722,208,211]],
+      "source": "exec-844cce41-beda-4415-85e4-eb96f8072432.png"
+    },
     "3": {
       "texture": "combat-pose-corrections",
       "bodyHeight": 224,
@@ -17,6 +23,23 @@
       "anchors": [193,560,905,1265],
       "frames": [[87,454,225,265],[435,483,260,236],[760,509,302,210],[1134,542,276,177]],
       "source": "exec-3bbe3d16-5375-4112-87a5-f7fde588299e.png"
+    }
+  },
+  "kobold-shaman-combat-sheet": {
+    "5": {
+      "texture": "combat-heavy-corrections", "bodyHeight": 188, "baseOffset": 22,
+      "anchors": [246,622,1008,1384],
+      "frames": [[64,116,285,188],[436,116,287,188],[816,116,300,188],[1227,116,251,188]],
+      "source": "exec-844cce41-beda-4415-85e4-eb96f8072432.png"
+    }
+  },
+  "seal-arbiter-combat-sheet": {
+    "viewport": {"display": 260, "alignBody": true},
+    "4": {
+      "texture": "combat-heavy-corrections", "bodyHeight": 198, "baseOffset": 0,
+      "anchors": [251,630,1024,1400],
+      "frames": [[56,423,297,198],[437,423,291,198],[787,429,348,191],[1200,428,297,193]],
+      "source": "exec-844cce41-beda-4415-85e4-eb96f8072432.png"
     }
   },
   "skeleton-combat-sheet": {

@@ -18,7 +18,8 @@ function prepareCombatArt(scene) {
   const colors = new Map();
   for (const [key, layout] of Object.entries(layouts)) {
     const source = scene.textures.get(key).getSourceImage();
-    const display = key.startsWith('seal-') ? 210 : key.startsWith('orc-') ? 178 : 164;
+    const viewport = corrections[key]?.viewport;
+    const display = viewport?.display || (key.startsWith('seal-') ? 210 : key.startsWith('orc-') ? 178 : 164);
     const grid = Math.round(display / 1.25);
     const anchors = layout.frames[0].map(([x, , w]) => x + w / 2);
     const heights = layout.frames[0].map(frame => frame[3]).sort((a, b) => a - b);
@@ -28,6 +29,15 @@ function prepareCombatArt(scene) {
       right = Math.max(right, x + w - anchors[col]);
       maxHeight = Math.max(maxHeight, h);
     }));
+    if (viewport) for (const [row, correction] of Object.entries(corrections[key])) {
+      if (row === 'viewport') continue;
+      const ratio = heights[2] / correction.bodyHeight;
+      correction.frames.forEach(([x, , w, h], col) => {
+        left = Math.min(left, (x - correction.anchors[col]) * ratio + correction.baseOffset);
+        right = Math.max(right, (x + w - correction.anchors[col]) * ratio + correction.baseOffset);
+        maxHeight = Math.max(maxHeight, h * ratio);
+      });
+    }
     // 모든 동작에 같은 배율을 적용해 머리와 무기가 프레임마다 커지는 현상을 막는다.
     const scale = Math.min(grid * .67 / heights[2], grid * .84 / (right - left), grid * .8 / maxHeight);
     const anchor = (grid - (right - left) * scale) / 2 - left * scale;
@@ -68,14 +78,15 @@ function prepareCombatArt(scene) {
     }));
     scene.textures.remove(key);
     scene.textures.addCanvas(key, packed).setFilter(Phaser.Textures.FilterMode.NEAREST);
-    audit[key] = { source: layout.generationSource, frames: stats, paletteSize: COMBAT_PALETTE.length };
+    audit[key] = { source: layout.generationSource, frames: stats, paletteSize: COMBAT_PALETTE.length, display, originX: viewport?.alignBody ? anchor / grid : .5 };
   }
   scene.registry.set('combatArtAudit', audit);
 }
 
 function combatFrames(key, row) {
   const resting = key.startsWith('kobold') ? [1, 2, 3, 2] : [0, 1, 3, 1];
-  const order = row === 'down' ? resting : row === 'guard' ? [0, 1] : [0, 1, 2, 3];
+  const restrainedHurt = row === 'hurt' && key.startsWith('goblin');
+  const order = row === 'down' ? resting : row === 'guard' ? [0, 1] : restrainedHurt ? [0, 2, 3] : [0, 1, 2, 3];
   const holds = row === 'heavy' ? [200, 260, 100, 100] : row === 'attack' ? [100, 160, 120, 80] : row === 'hurt' ? [40, 150, 100, 40] : [];
   return order.map(col => ({ key, frame: `${row}-${col}`, duration: holds[col] || 0 }));
 }
