@@ -657,7 +657,7 @@ class BattleScene extends Phaser.Scene {
   showFloatingText(x, y, value, color, emphatic = false) {
     const popup = this.text(x, y, value, emphatic ? 19 : 15, color, 'center').setDepth(20).setOrigin(.5);
     popup.setStroke('#171024', 4);
-    this.tweens.add({ targets: popup, y: y - (emphatic ? 64 : 46), alpha: 0, scaleX: emphatic ? 1.25 : 1, scaleY: emphatic ? 1.25 : 1, duration: emphatic ? 1000 : 800, ease: 'Cubic.Out', onComplete: () => popup.destroy() });
+    this.tweens.add({ targets: popup, y: y - (emphatic ? 64 : 46), alpha: 0, scaleX: emphatic ? 1.25 : 1, scaleY: emphatic ? 1.25 : 1, duration: emphatic ? 1400 : 1100, ease: 'Cubic.Out', onComplete: () => popup.destroy() });
   }
 
   playEffect(frame, x, y, size = 104, emphatic = false, duration = emphatic ? 440 : 300, depth = 15) {
@@ -1152,6 +1152,16 @@ class BattleScene extends Phaser.Scene {
     let causesDown = false;
     const lines = [];
 
+    // 보스도 일반전과 같은 자산 언어를 쓴다. 규칙 계산은 아래 기존 순서 그대로다.
+    if (fromPointer) {
+      if (enemy.key === 'defend') this.showEnemyGuard();
+      if (enemy.key === 'charge') this.setEnemyPose('charge', true);
+      if (action === 'attack') { this.setPlayerPose('attack', true); this.animateLunge('player'); }
+      else if (action === 'finisher') { this.setPlayerPose('heavy', true); this.animateLunge('player', true); this.cameras.main.shake(110, .004); }
+      else if (action === 'focus') { this.setPlayerPose('focus', true); this.animateFocus(enemy.key === 'defend'); }
+      else this.showFloatingText(this.playerFigure.x, this.playerFigure.y - 76, '방어 준비', '#8ec5ff');
+    }
+
     this.bossDown = false;
     this.stopEnemyDownMotion();
     if (action === 'attack') {
@@ -1178,9 +1188,13 @@ class BattleScene extends Phaser.Scene {
 
     if (playerDamage) {
       this.setHealth('enemy', this.enemyHp - playerDamage);
-      this.animateLunge('player', action === 'finisher');
+      if (!fromPointer) this.animateLunge('player', action === 'finisher');
       this.playEffect('attack', this.enemyFigure.x, this.enemyFigure.y, action === 'finisher' ? 126 : 106, action === 'finisher');
       this.showFloatingText(this.enemyFigure.x, this.enemyFigure.y - 58, `-${playerDamage}`, '#ffb1b8', action === 'finisher');
+      if (fromPointer) {
+        if (defendingEnemy) { this.setEnemyPose('parry', true); this.animateGuardParry('enemy'); this.showGuard('enemy', true); }
+        else { this.setEnemyPose('hurt', true); this.flashCombatant('enemy', 0xeb5b67, action === 'finisher'); }
+      }
       audio.play(action === 'finisher' ? 'finisher' : 'attack');
     }
     this.rhythm = Math.min(3, this.rhythm + rhythmGain);
@@ -1205,9 +1219,14 @@ class BattleScene extends Phaser.Scene {
       lines.push(this.enemyRhythm === 3 ? '심판관의 적 리듬이 완성됐다.' : '심판관이 힘을 모았다.');
       audio.play('charge');
     } else if (attackingEnemy) {
+      if (fromPointer) this.setEnemyPose(enemy.key === 'heavy' ? 'heavy' : 'attack', true);
       this.animateLunge('enemy', enemy.key === 'heavy');
       this.setHealth('player', this.playerHp - enemyDamage);
       this.showFloatingText(this.playerFigure.x, this.playerFigure.y - 58, `-${enemyDamage}`, action === 'defend' ? '#9fdcff' : '#ffb1b8', action === 'defend');
+      if (fromPointer) {
+        if (action === 'defend') { this.setPlayerPose('guard', true); this.showGuard('player', enemy.key === 'heavy'); this.animateGuardParry('player'); }
+        else { this.setPlayerPose(causesDown ? 'down' : 'hurt', true); this.flashCombatant('player', 0xeb5b67, false); }
+      }
       audio.play(action === 'defend' ? 'defend' : 'hit');
       if (blockedHeavy) this.showFloatingText(450, 178, '완벽 방어!', '#9fdcff', true);
     }
@@ -1236,7 +1255,10 @@ class BattleScene extends Phaser.Scene {
     else this.bossBundleIndex += 1;
     if (enemy.bossFinisher && !chargeInterrupted && !blockedHeavy) this.selectBossBundle();
     this.log = lines.join('\n');
-    this.setPlayerPose(this.isDown() ? 'down' : (startedDown ? 'hurt' : 'idle'), true);
+    if (!fromPointer) this.setPlayerPose(this.isDown() ? 'down' : (startedDown ? 'hurt' : 'idle'), true);
+    else if (!this.isDown()) this.scheduleResolution(action === 'finisher' ? 500 : 410, () => {
+      if (!this.over) { this.setPlayerPose('idle', true); if (!this.bossDown) this.setEnemyPose('idle', true); }
+    });
     if (!opensSeal) this.sealBroken = false;
     this.render();
     if (fromPointer) this.lockActionInput(action === 'finisher' ? 500 : 410);
