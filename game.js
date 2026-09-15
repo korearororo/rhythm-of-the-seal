@@ -301,9 +301,14 @@ class BootScene extends Phaser.Scene {
     // 시각 QA 전용 바로가기: 전투 규칙을 건드리지 않고 정상 보스 초기 상태로만 진입한다.
     // qaPose는 포즈를 반복 표시하고 qaOutcome은 기존 결과 화면만 즉시 재현한다.
     const qaParams = new URLSearchParams(window.location.search);
+    // 채팅/문서에서 URL을 복사할 때 `&amp;`가 실제 주소에 남아도 QA 경로가 idle로
+    // 조용히 떨어지지 않게, 표준 키와 엔티티가 남은 키를 함께 읽는다.
+    const qaParam = (name) => qaParams.get(name) || qaParams.get(`amp;${name}`);
     const qaBoss = qaParams.get('qa') === 'boss';
-    const qaPose = ['heavy', 'hurt'].includes(qaParams.get('qaPose')) ? qaParams.get('qaPose') : null;
-    const qaOutcome = ['lose', 'win'].includes(qaParams.get('qaOutcome')) ? qaParams.get('qaOutcome') : null;
+    const qaPoseValue = qaParam('qaPose');
+    const qaOutcomeValue = qaParam('qaOutcome');
+    const qaPose = ['heavy', 'hurt'].includes(qaPoseValue) ? qaPoseValue : null;
+    const qaOutcome = ['lose', 'win'].includes(qaOutcomeValue) ? qaOutcomeValue : null;
     if (qaBoss) {
       this.registry.set('battleOrder', ENEMY_ORDER);
       this.registry.set('battleIndex', ENEMY_ORDER.indexOf('arbiter'));
@@ -365,6 +370,8 @@ class BattleScene extends Phaser.Scene {
     this.buildUi();
     this.resetBattle();
     this.applyBossQaHook();
+    // resetBattle/create의 첫 프레임 작업 뒤에도 포즈가 idle로 덮이지 않도록 한 번 더 적용한다.
+    this.time.delayedCall(0, () => this.applyBossQaHook());
     this.events.once('shutdown', () => { this.stopDownMotion(); this.stopEnemyDownMotion(); audio.stopAll(); });
   }
 
