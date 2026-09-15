@@ -156,6 +156,15 @@ const ENEMY_PRESETS = {
 
 const ENEMY_ORDER = ['goblin', 'skeleton', 'kobold', 'orc', 'arbiter'];
 
+// 전투 규칙과 분리한 진행용 문구다. 다음 적의 정체와 구역만 전환 화면에서 알려 준다.
+const DUNGEON_FLOW = {
+  goblin: { zone: '성소 입구 · 1/5', threat: '흔들리는 봉인을 지키는 정찰병이 길을 막는다.' },
+  skeleton: { zone: '무너진 회랑 · 2/5', threat: '성소지기의 연속 검격이 통로를 지킨다.' },
+  kobold: { zone: '룬 저장고 · 3/5', threat: '룬 지팡이가 힘을 모아 다음 타격을 노린다.' },
+  orc: { zone: '봉인문 앞 · 4/5', threat: '파수꾼은 긴 호흡으로 강한 일격의 자리를 숨긴다.' },
+  arbiter: { zone: '봉인실 전실 · 최종전', threat: '심장석의 마지막 수호자가 봉인문 너머에서 기다린다.' },
+};
+
 function pixelSprite(scene, x, y, texture, frame, height, alpha = 1) {
   const sprite = scene.add.image(x, y, texture, frame).setAlpha(alpha);
   return sprite.setScale(height / sprite.height);
@@ -337,11 +346,13 @@ class IntroScene extends Phaser.Scene {
     pixelSprite(this, 704, 400, 'shrine-kit', 'rune', 108, .8);
     this.add.text(WIDTH / 2, 82, '봉인의 박자', { fontFamily: UI_FONT, fontSize: '36px', fontStyle: 'bold', color: '#ffd56a' }).setOrigin(.5);
     this.add.text(WIDTH / 2, 142, '성소 입구', { fontFamily: UI_FONT, fontSize: '19px', fontStyle: 'bold', color: '#f8f1ff' }).setOrigin(.5);
-    this.add.rectangle(WIDTH / 2, 286, 660, 172, 0x2a1d3b).setStrokeStyle(3, 0x9d7bbf);
-    this.add.text(WIDTH / 2, 220, '성벽 아래 오래된 성소의 봉인이 흔들린다.', { fontFamily: UI_FONT, fontSize: '16px', color: '#f8f1ff' }).setOrigin(.5);
-    this.add.text(WIDTH / 2, 258, '수습 기사는 박동에 동조하는 검을 들고\n정찰 중인 고블린을 지나 안으로 향한다.', { fontFamily: UI_FONT, fontSize: '15px', color: '#c6b6d8', align: 'center', lineSpacing: 9 }).setOrigin(.5);
-    this.add.text(WIDTH / 2, 410, '적의 예고를 읽고 리듬을 쌓으세요.', { fontFamily: UI_FONT, fontSize: '14px', fontStyle: 'bold', color: '#ffd56a' }).setOrigin(.5);
-    this.makeButton('성소 안으로', 450, 500, 220, 50, 0x765199, () => {
+    this.add.rectangle(WIDTH / 2, 302, 700, 228, 0x2a1d3b).setStrokeStyle(3, 0x9d7bbf);
+    this.add.text(WIDTH / 2, 205, '목표: 심장석을 되찾아 성소의 봉인을 복구하세요.', { fontFamily: UI_FONT, fontSize: '16px', fontStyle: 'bold', color: '#f8f1ff' }).setOrigin(.5);
+    this.add.text(WIDTH / 2, 244, '고블린 정찰병을 지나 성소 깊은 곳으로 향합니다.', { fontFamily: UI_FONT, fontSize: '15px', color: '#c6b6d8' }).setOrigin(.5);
+    this.add.text(WIDTH / 2, 296, '전투 조작', { fontFamily: UI_FONT, fontSize: '14px', fontStyle: 'bold', color: '#ffd56a' }).setOrigin(.5);
+    this.add.text(WIDTH / 2, 336, '공격: 힘 모으기 차단  ·  방어: 공격 피해 경감\n집중: 리듬 축적  ·  리듬 3: 강공격', { fontFamily: UI_FONT, fontSize: '14px', color: '#f8f1ff', align: 'center', lineSpacing: 10 }).setOrigin(.5);
+    this.add.text(WIDTH / 2, 392, '적의 자세와 결과를 관찰해 다음 행동을 고르세요.', { fontFamily: UI_FONT, fontSize: '14px', fontStyle: 'bold', color: '#ffd56a' }).setOrigin(.5);
+    this.makeButton('첫 전투 시작', 450, 514, 220, 50, 0x765199, () => {
       this.registry.set('battleOrder', ENEMY_ORDER);
       this.registry.set('battleIndex', 0);
       this.registry.set('carriedPlayerHp', null);
@@ -1397,11 +1408,12 @@ class EndingScene extends Phaser.Scene {
     pixelSprite(this, WIDTH / 2, 480, 'shrine-kit', 'floor-strip', 145, .65);
     pixelSprite(this, 450, 184, 'shrine-kit', 'rune', 172, .9);
     pixelSprite(this, 245, 410, 'characters', 'novice', 150, .92);
-    this.add.text(WIDTH / 2, 106, '성소의 봉인을 복구했다', { fontFamily: UI_FONT, fontSize: '20px', fontStyle: 'bold', color: '#ffd56a' }).setOrigin(.5);
-    this.add.rectangle(WIDTH / 2, 345, 680, 150, 0x2a1d3b).setStrokeStyle(3, 0x9d7bbf);
-    this.add.text(WIDTH / 2, 302, '심장석의 박동이 고르게 돌아온다.', { fontFamily: UI_FONT, fontSize: '18px', fontStyle: 'bold', color: '#f8f1ff' }).setOrigin(.5);
-    this.add.text(WIDTH / 2, 347, '수습 기사는 심장석을 제자리에 고정하고\n성소의 봉인을 복구했다.', { fontFamily: UI_FONT, fontSize: '15px', color: '#c6b6d8', align: 'center', lineSpacing: 9 }).setOrigin(.5);
-    this.makeButton('처음부터 다시', 450, 500, 220, 50, 0x765199, () => this.scene.start('intro'));
+    this.add.text(WIDTH / 2, 106, '심장석 복구 완료', { fontFamily: UI_FONT, fontSize: '20px', fontStyle: 'bold', color: '#ffd56a' }).setOrigin(.5);
+    this.add.rectangle(WIDTH / 2, 345, 680, 166, 0x2a1d3b).setStrokeStyle(3, 0x9d7bbf);
+    this.add.text(WIDTH / 2, 296, '성소의 심장석이 다시 고르게 뛴다.', { fontFamily: UI_FONT, fontSize: '18px', fontStyle: 'bold', color: '#f8f1ff' }).setOrigin(.5);
+    this.add.text(WIDTH / 2, 347, '수습 기사는 다섯 수호를 지나 심장석을 제자리에 고정했다.\n이제 성소의 봉인이 다시 세워진다.', { fontFamily: UI_FONT, fontSize: '15px', color: '#c6b6d8', align: 'center', lineSpacing: 9 }).setOrigin(.5);
+    this.add.text(WIDTH / 2, 410, '성소의 박자는 당신의 검과 함께 계속됩니다.', { fontFamily: UI_FONT, fontSize: '14px', fontStyle: 'bold', color: '#ffd56a' }).setOrigin(.5);
+    this.makeButton('입구로 돌아가기', 450, 510, 220, 50, 0x765199, () => this.scene.start('intro'));
   }
 
   makeButton(label, x, y, w, h, color, callback) {
@@ -1427,24 +1439,27 @@ class BattleTransitionScene extends Phaser.Scene {
 
     this.cameras.main.setBackgroundColor('#171024');
     this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x171024);
-    this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, 240, 0x2a1d3b).setStrokeStyle(3, 0x9d7bbf);
-    this.add.text(WIDTH / 2, 130, '적 조우 완료', { fontFamily: UI_FONT, fontSize: '30px', fontStyle: 'bold', color: '#ffd56a' }).setOrigin(.5);
+    this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, 292, 0x2a1d3b).setStrokeStyle(3, 0x9d7bbf);
     const defeatedName = (currentEnemy && currentEnemy.displayName) || '적';
     const nextEnemyName = (nextEnemy && nextEnemy.displayName) || '다음 적';
-    this.add.text(WIDTH / 2, 195, `${defeatedName}을 쓰러뜨렸다.`, { fontFamily: UI_FONT, fontSize: '18px', fontStyle: 'bold', color: '#f8f1ff' }).setOrigin(.5);
-    this.add.text(WIDTH / 2, 225, `${nextEnemyName}가 봉인문으로 나아온다.`, { fontFamily: UI_FONT, fontSize: '17px', color: '#c6b6d8', align: 'center' }).setOrigin(.5);
+    const flow = DUNGEON_FLOW[nextEnemy?.id] || { zone: '성소 깊은 곳', threat: `${nextEnemyName}가 길을 막는다.` };
+    this.add.text(WIDTH / 2, 110, flow.zone, { fontFamily: UI_FONT, fontSize: '24px', fontStyle: 'bold', color: '#ffd56a' }).setOrigin(.5);
+    this.add.text(WIDTH / 2, 156, `${defeatedName}을 쓰러뜨렸다.`, { fontFamily: UI_FONT, fontSize: '17px', color: '#c6b6d8' }).setOrigin(.5);
+    this.add.text(WIDTH / 2, 194, nextEnemyName, { fontFamily: UI_FONT, fontSize: '20px', fontStyle: 'bold', color: '#f8f1ff' }).setOrigin(.5);
     const carriedPlayerHp = this.registry.get('carriedPlayerHp');
     const preparation = typeof carriedPlayerHp === 'number'
       ? (nextEnemy.boss
         ? '전투 준비: HP 완전 회복 · 리듬 0으로 시작'
         : `전투 준비: HP ${carriedPlayerHp} · 일반전 승리 +${GENERAL_BATTLE_HEAL} 회복 · 리듬 0으로 시작`)
       : '전투 준비: HP 34 · 리듬 0으로 시작';
-    this.add.text(WIDTH / 2, 269, preparation, { fontFamily: UI_FONT, fontSize: '14px', fontStyle: 'bold', color: '#ffd56a' }).setOrigin(.5);
+    this.add.text(WIDTH / 2, 238, preparation, { fontFamily: UI_FONT, fontSize: '14px', fontStyle: 'bold', color: '#ffd56a' }).setOrigin(.5);
     if (nextEnemy.boss) {
-      this.add.text(WIDTH / 2, 311, '힘 모으기는 공격으로 끊고, 강공격은 방어로 버티세요.\n열린 봉인에 다음 행동으로 결정타를 넣으면 24 피해를 줍니다.', { fontFamily: UI_FONT, fontSize: '14px', color: '#f8f1ff', align: 'center', lineSpacing: 9 }).setOrigin(.5);
+      this.add.text(WIDTH / 2, 302, '마지막 수호가 기다립니다. 힘 모으기는 공격으로 끊고, 강공격은 방어로 버티세요.\n열린 봉인에 다음 행동으로 결정타를 넣으면 24 피해를 줍니다.', { fontFamily: UI_FONT, fontSize: '14px', color: '#f8f1ff', align: 'center', lineSpacing: 9 }).setOrigin(.5);
+    } else {
+      this.add.text(WIDTH / 2, 292, flow.threat, { fontFamily: UI_FONT, fontSize: '14px', color: '#f8f1ff', align: 'center' }).setOrigin(.5);
     }
-    this.makeButton(nextEnemy.boss ? '심판관과 전투' : '다음 적과 전투', WIDTH / 2, 390, 240, 52, 0x6c9b56, () => this.scene.start('battle'));
-    this.makeButton('처음부터 다시', WIDTH / 2, 480, 230, 48, 0x765199, () => {
+    this.makeButton(nextEnemy.boss ? '심판관과 전투' : '다음 적과 전투', WIDTH / 2, 416, 240, 52, 0x6c9b56, () => this.scene.start('battle'));
+    this.makeButton('입구로 돌아가기', WIDTH / 2, 500, 230, 48, 0x765199, () => {
       this.registry.set('battleIndex', 0);
       this.scene.start('intro');
     });
