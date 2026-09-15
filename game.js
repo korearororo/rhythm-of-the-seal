@@ -221,6 +221,7 @@ class BootScene extends Phaser.Scene {
   constructor() { super('boot'); }
 
   preload() {
+    this.load.json('combat-atlas-layout', 'assets/combat-atlas-layout.json');
     this.load.image('shrine-kit', 'assets/shrine-kit.png');
     this.load.image('characters', 'assets/characters.png');
     this.load.image('skeleton-shrine-keeper', 'assets/skeleton-shrine-keeper.png');
@@ -237,6 +238,7 @@ class BootScene extends Phaser.Scene {
 
   create() {
     validateEnemyPresets();
+    prepareCombatArt(this);
 
     const shrine = this.textures.get('shrine-kit');
     shrine.add('arch', 0, 0, 0, 680, 770);
@@ -267,8 +269,8 @@ class BootScene extends Phaser.Scene {
       }
       this.anims.create({
         key: `novice-${row}`,
-        // 다운은 쓰러짐·회복 프레임을 왕복해 쓰러진 뒤에도 생동감을 남긴다.
-        frames: (row === 'down' ? [0, 1, 2, 3, 2, 1] : [0, 1, 2, 3]).map(column => ({ key: 'novice-combat-sheet', frame: `${row}-${column}` })),
+        // 다운은 무릎 자세의 작은 호흡만 반복한다.
+        frames: combatFrames('novice-combat-sheet', row),
         frameRate: row === 'down' ? 3 : (row === 'attack' || row === 'hurt' ? 12 : 9),
         repeat: row === 'idle' || row === 'down' ? -1 : 0,
       });
@@ -276,14 +278,14 @@ class BootScene extends Phaser.Scene {
     const goblinCombat = this.textures.get('goblin-combat-sheet');
     ['idle', 'attack', 'guard', 'hurt', 'parry', 'down'].forEach((row, rowIndex) => {
       for (let column = 0; column < 4; column++) goblinCombat.add(`${row}-${column}`, 0, column * 280, rowIndex * 280, 280, 280);
-      this.anims.create({ key: `goblin-${row}`, frames: (row === 'down' ? [0, 1, 2, 3, 2, 1] : [0, 1, 2, 3]).map(column => ({ key: 'goblin-combat-sheet', frame: `${row}-${column}` })), frameRate: row === 'down' ? 3 : (row === 'attack' || row === 'hurt' ? 12 : 9), repeat: row === 'idle' || row === 'down' ? -1 : 0 });
+      this.anims.create({ key: `goblin-${row}`, frames: combatFrames('goblin-combat-sheet', row), frameRate: row === 'down' ? 3 : (row === 'attack' || row === 'hurt' ? 12 : 9), repeat: row === 'idle' || row === 'down' ? -1 : 0 });
     });
     const skeletonCombat = this.textures.get('skeleton-combat-sheet');
     ['idle', 'attack', 'guard', 'hurt', 'parry', 'down'].forEach((row, rowIndex) => {
       for (let column = 0; column < 4; column++) skeletonCombat.add(`${row}-${column}`, 0, column * 280, rowIndex * 280, 280, 280);
       this.anims.create({
         key: `skeleton-${row}`,
-        frames: (row === 'down' ? [0, 1, 2, 3, 2, 1] : [0, 1, 2, 3]).map(column => ({ key: 'skeleton-combat-sheet', frame: `${row}-${column}` })),
+        frames: combatFrames('skeleton-combat-sheet', row),
         frameRate: row === 'down' ? 3 : (row === 'attack' || row === 'hurt' ? 12 : 9),
         repeat: row === 'idle' || row === 'down' ? -1 : 0,
       });
@@ -294,7 +296,7 @@ class BootScene extends Phaser.Scene {
         for (let column = 0; column < 4; column++) combatTexture.add(`${row}-${column}`, 0, column * 280, rowIndex * 280, 280, 280);
         this.anims.create({
           key: `${enemyId}-${row}`,
-          frames: (row === 'down' ? [0, 1, 2, 3, 2, 1] : [0, 1, 2, 3]).map(column => ({ key: textureKey, frame: `${row}-${column}` })),
+          frames: combatFrames(textureKey, row),
           frameRate: row === 'down' ? 3 : (row === 'attack' || row === 'hurt' || row === 'heavy' ? 12 : 9),
           repeat: row === 'idle' || row === 'down' ? -1 : 0,
         });
@@ -305,7 +307,7 @@ class BootScene extends Phaser.Scene {
       for (let column = 0; column < 4; column++) arbiterCombat.add(`${row}-${column}`, 0, column * 280, rowIndex * 280, 280, 280);
       this.anims.create({
         key: `arbiter-${row}`,
-        frames: (row === 'down' ? [0, 1, 2, 3, 2, 1] : [0, 1, 2, 3]).map(column => ({ key: 'seal-arbiter-combat-sheet', frame: `${row}-${column}` })),
+        frames: combatFrames('seal-arbiter-combat-sheet', row),
         frameRate: row === 'down' ? 3 : (row === 'attack' || row === 'hurt' || row === 'heavy' ? 12 : 9),
         repeat: row === 'idle' || row === 'down' ? -1 : 0,
       });
@@ -342,7 +344,7 @@ class IntroScene extends Phaser.Scene {
     this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x171024);
     pixelSprite(this, WIDTH / 2, 287, 'shrine-kit', 'arch', 450, .46);
     pixelSprite(this, WIDTH / 2, 520, 'shrine-kit', 'floor-strip', 155, .72);
-    pixelSprite(this, 196, 404, 'characters', 'novice', 146, .9).setFlipX(true);
+    this.add.sprite(196, 404, 'novice-combat-sheet', 'idle-0').setScale(164 / 280).play('novice-idle');
     pixelSprite(this, 704, 400, 'shrine-kit', 'rune', 108, .8);
     this.add.text(WIDTH / 2, 82, '봉인의 박자', { fontFamily: UI_FONT, fontSize: '36px', fontStyle: 'bold', color: '#ffd56a' }).setOrigin(.5);
     this.add.text(WIDTH / 2, 142, '성소 입구', { fontFamily: UI_FONT, fontSize: '19px', fontStyle: 'bold', color: '#f8f1ff' }).setOrigin(.5);
@@ -682,6 +684,10 @@ class BattleScene extends Phaser.Scene {
 
   showGuard(side, emphatic = false) {
     const figure = side === 'player' ? this.playerFigure : this.enemyFigure;
+    if (side === 'player' || this.enemyConfig.boss) {
+      figure.anims.stop();
+      figure.setFrame('guard-2');
+    }
     const compactGoblinGuard = side === 'enemy' && this.enemyConfig.id === 'goblin';
     figure.setTint(0x83d6ff);
     this.time.delayedCall(emphatic ? 520 : 440, () => {
@@ -941,7 +947,6 @@ class BattleScene extends Phaser.Scene {
   showEnemyGuard() {
     this.setEnemyPose('guard', true);
     this.animateGoblinGuard();
-    this.showGuard('enemy');
   }
 
   applyTutorialEnemyHit(outcome, fromPointer = false) {
@@ -1350,7 +1355,7 @@ class EndingScene extends Phaser.Scene {
     pixelSprite(this, WIDTH / 2, 242, 'shrine-kit', 'arch', 420, .34);
     pixelSprite(this, WIDTH / 2, 480, 'shrine-kit', 'floor-strip', 145, .65);
     pixelSprite(this, 450, 184, 'shrine-kit', 'rune', 172, .9);
-    pixelSprite(this, 245, 410, 'characters', 'novice', 150, .92);
+    this.add.sprite(245, 410, 'novice-combat-sheet', 'idle-0').setScale(164 / 280).play('novice-idle');
     this.add.text(WIDTH / 2, 106, '심장석 복구 완료', { fontFamily: UI_FONT, fontSize: '20px', fontStyle: 'bold', color: '#ffd56a' }).setOrigin(.5);
     this.add.rectangle(555, 370, 460, 150, 0x171024, .94).setStrokeStyle(1, 0x776344);
     this.add.text(555, 329, '심장석이 다시 뛰기 시작했다.', { fontFamily: UI_FONT, fontSize: '20px', color: '#f8f1ff' }).setOrigin(.5);
