@@ -20,8 +20,8 @@
 필요한 것은 Python 3와 웹 브라우저뿐입니다. npm 설치나 빌드 과정은 없습니다. Phaser 3.90은 `index.html`에서 CDN으로 불러오므로 최초 실행 시 인터넷 연결이 필요합니다.
 
 ```powershell
-git clone https://github.com/korearororo/the.git
-cd the
+git clone https://github.com/korearororo/rhythm-of-the-seal.git
+cd rhythm-of-the-seal
 python -m http.server 8000 --bind 127.0.0.1
 ```
 
@@ -114,8 +114,8 @@ Enemies follow deterministic rules instead of choosing moves randomly. Their nex
 You need Python 3 and a web browser. No npm installation or build step is required. Phaser 3.90 loads from a CDN, so an internet connection is required when the library is not cached.
 
 ```sh
-git clone https://github.com/korearororo/the.git
-cd the
+git clone https://github.com/korearororo/rhythm-of-the-seal.git
+cd rhythm-of-the-seal
 python -m http.server 8000 --bind 127.0.0.1
 ```
 
